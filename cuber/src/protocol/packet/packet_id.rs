@@ -21,7 +21,17 @@ pub enum PacketId {
 
     // Play
     BundleDelimiter,
+    SpawnEntify,
+    SpawnPlayer,
+    PluginMessage,
+    ChangeDifficulty,
     LoginPlay,
+    FeatureFlags,
+    PlayerAbilities,
+    SetHeldItem,
+    UpdateRecipes,
+    ChunkDataAndUpdateLight,
+    Respawn,
 
     // Meta
     Unset,
@@ -82,7 +92,17 @@ impl PacketId {
 
             // Play
             Self::BundleDelimiter => 0,
+            Self::SpawnEntify => 0x01,
+            Self::SpawnPlayer => 0x03,
+            Self::PluginMessage => 0x17,
+            Self::ChangeDifficulty => 0x0c,
             Self::LoginPlay => 0x28,
+            Self::FeatureFlags => 0x6b,
+            Self::PlayerAbilities => 0x34,
+            Self::SetHeldItem => 0x4d,
+            Self::UpdateRecipes => 0x6d,
+            Self::ChunkDataAndUpdateLight => 0x24,
+            Self::Respawn => 0x41,
 
             Self::Unset => {
                 unreachable!("Unset")

@@ -1,16 +1,14 @@
 pub mod packet_id;
 
-use std::collections::HashMap;
+use std::io::Write;
 
 use packet_id::PacketId;
 
 use super::client::ClientState;
 use super::data_types::*;
 use super::IResult;
-use byteorder::LittleEndian;
 use byteorder::WriteBytesExt;
 use byteorder::{BigEndian, ReadBytesExt};
-use num_traits::ToPrimitive;
 
 use std::io::Cursor;
 use std::io::Read;
@@ -20,6 +18,40 @@ pub enum HandshakeNextState {
     Status = 1,
     Login = 2,
 }
+
+#[derive(Debug, PartialEq, Eq, Clone, Copy)]
+pub enum FeatureFlags {
+    Vanilla,
+    Bundle
+}
+
+impl FeatureFlags {
+    fn to_ident(self) -> &'static str {
+        match self {
+            Self::Vanilla => "minecraft:vanilla",
+            Self::Bundle => "minecraft:bundle",
+        }
+    }
+}
+
+#[derive(Debug, PartialEq, Eq, Clone, Copy)]
+pub struct EntityId {
+    pub id: i32,
+}
+
+
+use bitflags::bitflags;
+bitflags! {
+    pub struct PlayerAbilitiesFlags: u8 {
+        const InVulnerable      = 0b00000001;
+        const Flying            = 0b00000010;
+        const AllowFlying       = 0b00000100;
+        const CreativeMode      = 0b00001000;
+    }
+}
+
+#[derive(Debug)]
+pub struct Recipes();
 
 #[derive(Debug)]
 pub struct PacketParser {
@@ -68,8 +100,6 @@ impl PacketParser {
     }
 
     pub fn read_packet_id(&mut self) -> IResult<PacketId> {
-        use num_traits::FromPrimitive;
-
         PacketId::to_serv_from_i32(self.state, self.read_var_int()?)
     }
     pub fn read_version(&mut self) -> IResult<i32> {
@@ -164,28 +194,28 @@ impl PacketBuilder {
         self.packet_id = id;
     }
     pub(crate) fn write_var_int(&mut self, val: i32) -> IResult<()> {
-        use std::io::Write;
         let data = build_var_int(val);
         self.built_data.write_all(&data)
     }
     pub(crate) fn write_string(&mut self, s: String) -> IResult<()> {
-        use std::io::Write;
         let string_length = s.len();
         self.write_var_int(string_length as i32)?;
         self.built_data.write_all(&s.as_bytes()[..string_length])
     }
     pub(crate) fn write_uuid(&mut self, uuid: uuid::Uuid) -> IResult<()> {
-        self.built_data
-            .write_u128::<LittleEndian>(uuid.to_u128_le())
-    }
-    pub(crate) fn write_int(&mut self, val: i32) -> IResult<()> {
-        self.built_data.write_i32::<BigEndian>(val)
+        self.built_data.write_all(uuid.as_bytes())
     }
     pub(crate) fn write_unsigned_byte(&mut self, byte: u8) -> IResult<()> {
         self.built_data.write_u8(byte)
     }
     pub(crate) fn write_byte(&mut self, byte: i8) -> IResult<()> {
         self.built_data.write_i8(byte)
+    }
+    pub(crate) fn write_short(&mut self, val: i16) -> IResult<()> {
+        self.built_data.write_i16::<BigEndian>(val)
+    }
+    pub(crate) fn write_int(&mut self, val: i32) -> IResult<()> {
+        self.built_data.write_i32::<BigEndian>(val)
     }
     pub(crate) fn write_long(&mut self, v: i64) -> IResult<()> {
         self.built_data.write_i64::<BigEndian>(v)
@@ -196,6 +226,19 @@ impl PacketBuilder {
         } else {
             self.write_unsigned_byte(0)
         }
+    }
+    pub(crate) fn write_float(&mut self, v: f32) -> IResult<()> {
+        self.built_data.write_f32::<BigEndian>(v)
+    }
+    pub(crate) fn write_double(&mut self, v: f64) -> IResult<()> {
+        self.built_data.write_f64::<BigEndian>(v)
+    }
+    pub(crate) fn write_bit_set(&mut self, bits: &[i64]) -> IResult<()> {
+        self.write_var_int(bits.len() as i32)?;
+        for b in bits {
+            self.write_long(*b)?;
+        }
+        Ok(())
     }
 
     pub fn write_login_success(
@@ -212,18 +255,17 @@ impl PacketBuilder {
         self.write_var_int(0)
     }
 
-    pub fn write_login_play(&mut self) -> IResult<()> {
+    pub fn write_login_play(&mut self, entity_id: EntityId, codec: nbt::Blob) -> IResult<()> {
         self.set_packet_id(PacketId::LoginPlay);
 
-        self.write_int(0)?; // TODO: entity ID.
+        self.write_int(entity_id.id)?; // TODO: entity ID.
         self.write_boolean(false)?;
         self.write_unsigned_byte(0)?;
         self.write_byte(-1)?;
 
         self.write_var_int(1)?;
-        self.write_string("overworld".to_string())?;
+        self.write_string("minecraft:overworld".to_string())?;
 
-        let codec = nbt::Blob::new();
         codec.to_writer(&mut self.built_data)?;
 
         self.write_string("natural".to_string())?;
@@ -239,5 +281,142 @@ impl PacketBuilder {
         self.write_boolean(true)?;
         self.write_boolean(false)?;
         self.write_var_int(0)
+    }
+
+    pub fn write_spawn_player(&mut self, uuid: uuid::Uuid) -> IResult<()> {
+        self.set_packet_id(PacketId::SpawnPlayer);
+
+        self.write_var_int(100)?;
+        self.write_uuid(uuid)?;
+        self.write_double(0.)?;
+        self.write_double(0.)?;
+        self.write_double(0.)?;
+        self.write_byte(0)?;
+        self.write_byte(0)
+    }
+
+    pub fn write_change_difficulty(&mut self) -> IResult<()> {
+        self.set_packet_id(PacketId::ChangeDifficulty);
+        self.write_unsigned_byte(3)?;
+        self.write_boolean(false)
+    }
+
+    pub fn write_spawn_entity(&mut self, uuid: uuid::Uuid) -> IResult<()> {
+        self.set_packet_id(PacketId::SpawnEntify);
+        self.write_var_int(100)?;
+        self.write_uuid(uuid)?;
+        self.write_var_int(0)?;
+        self.write_double(0.)?;
+        self.write_double(0.)?;
+        self.write_double(0.)?;
+
+        self.write_byte(0)?;
+        self.write_byte(0)?;
+        self.write_byte(0)?;
+
+        self.write_var_int(0)?;
+
+        self.write_short(0)?;
+        self.write_short(0)?;
+        self.write_short(0)?;
+
+        Ok(())
+    }
+
+    pub fn write_feature_flags(&mut self, features: &[FeatureFlags]) -> IResult<()> {
+        self.set_packet_id(PacketId::FeatureFlags);
+
+        let length = features.len();
+        self.write_var_int(length as i32)?;
+        
+        for s in features {
+            self.write_string(s.to_ident().to_string())?;
+        }
+
+        Ok(())
+    }
+
+    pub fn write_plugin_message(&mut self, channel: String, data: &[u8]) -> IResult<()> {
+        self.set_packet_id(PacketId::PluginMessage);
+
+        self.write_string(channel)?;
+        self.write_var_int(data.len() as i32)?;
+        self.built_data.write_all(&data)
+    }
+
+    pub fn write_player_abilities(&mut self, flags: PlayerAbilitiesFlags, flying_speed: f32, field_of_view_modifier: f32) -> IResult<()> {
+        self.set_packet_id(PacketId::PlayerAbilities);
+
+        self.write_unsigned_byte(flags.bits())?;
+        self.write_float(flying_speed)?;
+        self.write_float(field_of_view_modifier)
+    }
+
+    pub fn write_held_item(&mut self, pos: u8) -> IResult<()> {
+        if 8 < pos {
+            println!("Position({}) is not support in vanilla", pos);
+        }
+
+        self.set_packet_id(PacketId::SetHeldItem);
+        self.write_unsigned_byte(pos)
+    }
+
+    pub fn write_update_recipes(&mut self, recipes: &[Recipes]) -> IResult<()> {
+        self.set_packet_id(PacketId::UpdateRecipes);
+
+        self.write_var_int(recipes.len() as i32)?;
+
+        println!("Recipe is not implemented yet");
+
+        Ok(())
+    }
+    
+    pub fn write_chunk_data_update_light(&mut self) -> IResult<()> {
+        self.set_packet_id(PacketId::ChunkDataAndUpdateLight);
+
+        self.write_int(0)?;
+        self.write_int(0)?;
+
+        let mut heightmaps = nbt::Blob::new();
+        let array = nbt::Value::LongArray(vec![0, 256]);
+        heightmaps.insert("MOTION_BLOCKING", array)?;
+
+        heightmaps.to_writer(&mut self.built_data)?;
+
+        self.write_var_int(0)?;
+        // Skip data
+        
+        self.write_var_int(0)?;
+        // Skip block entity
+        
+        self.write_bit_set(&[0])?;
+        self.write_bit_set(&[0])?;
+        self.write_bit_set(&[0])?;
+        self.write_bit_set(&[0])?;
+
+        self.write_var_int(0)?;
+        // Skip sky light array
+
+        self.write_var_int(0)?;
+        // Skip block light array
+
+        Ok(())
+    }
+
+    pub fn write_respawn(&mut self) -> IResult<()> {
+        self.set_packet_id(PacketId::Respawn);
+
+        self.write_string("natural".to_string())?;
+        self.write_string("minecraft:overworld".to_string())?;
+        self.write_long(100)?;
+        self.write_unsigned_byte(0)?;
+        self.write_byte(-1)?;
+        self.write_boolean(true)?;
+        self.write_boolean(true)?;
+        self.write_byte(0b01 | 0b10)?;
+        self.write_boolean(false)?;
+        self.write_var_int(10)?;
+
+        Ok(())
     }
 }

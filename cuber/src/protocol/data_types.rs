@@ -74,7 +74,6 @@ pub fn build_var_int(value: i32) -> Vec<u8> {
     }
 
     result.push(remaining_value as u8);
-    // result.reverse();
 
     result
 }
@@ -82,18 +81,77 @@ pub fn build_var_int(value: i32) -> Vec<u8> {
 #[cfg(test)]
 mod tests {
     use super::*;
-
-    #[test]
-    fn test_build_var_int_zero() {
-        let value = 0;
-        let result = build_var_int(value);
-        assert_eq!(result, vec![0]);
+    macro_rules! make_build_test_case {
+        ($name: ident, $bytes: expr, $value: expr) => {
+            #[test]
+            fn $name() {
+                let value = $value;
+                let result = build_var_int(value);
+                assert_eq!(result, $bytes);
+            }
+        };
     }
 
-    #[test]
-    fn test_build_var_int_positive_value() {
-        let value = 150;
-        let result = build_var_int(value);
-        assert_eq!(result, vec![0x96, 0x01]);
+    macro_rules! make_read_test_case {
+        ($name: ident, $bytes: expr, $value: expr) => {
+            #[test]
+            fn $name() {
+                use std::io::Cursor;
+
+                let bytes = $bytes;
+                let length = bytes.len();
+                let mut bytes = Cursor::new(bytes);
+                let (len, v) = read_var_int(&mut bytes).unwrap();
+                assert_eq!(v, $value);
+                assert_eq!(length, len);
+            }
+        };
     }
+    make_build_test_case!(test_build_var_int_zero, vec![0], 0);
+    make_build_test_case!(test_build_var_int_one, vec![1], 1);
+    make_build_test_case!(test_build_var_int_two, vec![2], 2);
+    make_build_test_case!(test_build_var_int_127, vec![0x7f], 127);
+    make_build_test_case!(test_build_var_int_128, vec![0x80, 0x01], 128);
+    make_build_test_case!(test_build_var_int_255, vec![0xff, 0x01], 255);
+    make_build_test_case!(test_build_var_int_25565, vec![0xdd, 0xc7, 0x01], 25565);
+    make_build_test_case!(test_build_var_int_2097151, vec![0xff, 0xff, 0x7f], 2097151);
+    make_build_test_case!(
+        test_build_var_int_2147483647,
+        vec![0xff, 0xff, 0xff, 0xff, 0x07],
+        2147483647
+    );
+    make_build_test_case!(
+        test_build_var_int_minus_1,
+        vec![0xff, 0xff, 0xff, 0xff, 0x0f],
+        -1
+    );
+    make_build_test_case!(
+        test_build_var_int_minus_2147483648,
+        vec![0x80, 0x80, 0x80, 0x80, 0x08],
+        -2147483648
+    );
+
+    make_read_test_case!(test_read_var_int_zero, vec![0], 0);
+    make_read_test_case!(test_read_var_int_one, vec![1], 1);
+    make_read_test_case!(test_read_var_int_two, vec![2], 2);
+    make_read_test_case!(test_read_var_int_127, vec![0x7f], 127);
+    make_read_test_case!(test_read_var_int_128, vec![0x80, 0x01], 128);
+    make_read_test_case!(test_read_var_int_255, vec![0xff, 0x01], 255);
+    make_read_test_case!(test_read_var_int_25565, vec![0xdd, 0xc7, 0x01], 25565);
+    make_read_test_case!(test_read_var_int_2097151, vec![0xff, 0xff, 0x7f], 2097151);
+    make_read_test_case!(
+        test_read_var_int_2147483647,
+        vec![0xff, 0xff, 0xff, 0xff, 0x07],
+        2147483647
+    );
+    make_read_test_case!(
+        test_read_var_int_minus_1,
+        vec![0xff, 0xff, 0xff, 0xff, 0x0f],
+        -1
+    );
+    make_read_test_case!(
+        test_read_var_int_minus_2147483648,
+        vec![0x80, 0x80, 0x80, 0x80, 0x08],
+        -2147483648
+    );
 }

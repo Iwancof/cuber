@@ -2,14 +2,12 @@
 
 pub mod protocol;
 
-use protocol::data_types::async_read_var_int;
 use protocol::packet::PacketBuilder;
 
-use std::net::Ipv4Addr;
-use tokio::io::Result as TIResult;
-use tokio::net::{TcpListener, TcpStream};
+use std::{net::Ipv4Addr, io};
+use tokio::net::TcpListener;
 
-use crate::protocol::packet::packet_id::PacketId;
+use crate::protocol::packet::EntityId;
 
 #[macro_use]
 extern crate num_derive;
@@ -42,9 +40,53 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
         client.set_state(protocol::client::ClientState::Play);
         let mut pb = PacketBuilder::new();
-        pb.write_login_play()?;
-        client.send_packet(pb.clone()).await?;
+        pb.write_login_play(EntityId { id: 10 }, read_mock_nbt_blob()?)?;
+        client.send_packet(pb).await?;
+
+        let mut pb = PacketBuilder::new();
+        pb.write_feature_flags(&[protocol::packet::FeatureFlags::Vanilla])?;
+        client.send_packet(pb).await?;
+
+        let mut pb = PacketBuilder::new();
+        pb.write_plugin_message("minecraft:brand".to_string(), "vanilla".as_bytes())?;
+        client.send_packet(pb).await?;
+
+        let mut pb = PacketBuilder::new();
+        pb.write_change_difficulty()?;
+        client.send_packet(pb).await?;
+
+        let mut pb = PacketBuilder::new();
+        pb.write_player_abilities(protocol::packet::PlayerAbilitiesFlags::empty(), 0.05, 0.1)?;
+        client.send_packet(pb).await?;
+
+        let mut pb = PacketBuilder::new();
+        pb.write_held_item(0)?;
+        client.send_packet(pb).await?;
+
+        let mut pb = PacketBuilder::new();
+        pb.write_chunk_data_update_light()?;
+        client.send_packet(pb).await?;
+
+        let mut pb = PacketBuilder::new();
+        pb.write_spawn_player(uuid)?;
+        client.send_packet(pb).await?;
+
+        /*
+        let mut pb = PacketBuilder::new();
+        pb.write_spawn_entity(uuid)?;
+        client.send_packet(pb).await?;
+        */
+
+        let mut pb = PacketBuilder::new();
+        pb.write_respawn()?;
+        client.send_packet(pb).await?;
 
         client.get_packet().await?;
     }
+}
+
+fn read_mock_nbt_blob() -> std::io::Result<nbt::Blob> {
+    use std::fs;
+    let f = fs::File::open("../1_20_1_codec.bin")?;
+    Ok(nbt::de::from_reader(f)?)
 }

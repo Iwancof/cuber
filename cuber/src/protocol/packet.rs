@@ -263,22 +263,24 @@ impl PacketBuilder {
         self.write_unsigned_byte(0)?;
         self.write_byte(-1)?;
 
-        self.write_var_int(1)?;
+        self.write_var_int(3)?;
         self.write_string("minecraft:overworld".to_string())?;
+        self.write_string("minecraft:the_end".to_string())?;
+        self.write_string("minecraft:nether".to_string())?;
 
         codec.to_writer(&mut self.built_data)?;
 
-        self.write_string("natural".to_string())?;
-        self.write_string("natural".to_string())?;
+        self.write_string("minecraft:overworld".to_string())?;
+        self.write_string("minecraft:overworld".to_string())?;
 
-        self.write_long(0x1000)?;
-        self.write_var_int(100)?;
-        self.write_var_int(3)?;
-        self.write_var_int(3)?;
+        self.write_long(0x100000)?;
+        self.write_var_int(20)?;
+        self.write_var_int(16)?;
+        self.write_var_int(16)?;
         self.write_boolean(false)?;
         self.write_boolean(true)?;
-        self.write_boolean(true)?;
-        self.write_boolean(true)?;
+        self.write_boolean(false)?;
+        self.write_boolean(false)?;
         self.write_boolean(false)?;
         self.write_var_int(0)
     }
@@ -286,7 +288,7 @@ impl PacketBuilder {
     pub fn write_spawn_player(&mut self, uuid: uuid::Uuid) -> IResult<()> {
         self.set_packet_id(PacketId::SpawnPlayer);
 
-        self.write_var_int(100)?;
+        self.write_var_int(10)?;
         self.write_uuid(uuid)?;
         self.write_double(0.)?;
         self.write_double(0.)?;
@@ -303,7 +305,7 @@ impl PacketBuilder {
 
     pub fn write_spawn_entity(&mut self, uuid: uuid::Uuid) -> IResult<()> {
         self.set_packet_id(PacketId::SpawnEntify);
-        self.write_var_int(100)?;
+        self.write_var_int(10)?;
         self.write_uuid(uuid)?;
         self.write_var_int(0)?;
         self.write_double(0.)?;
@@ -378,9 +380,11 @@ impl PacketBuilder {
         self.write_int(0)?;
 
         let mut heightmaps = nbt::Blob::new();
-        let array = nbt::Value::LongArray(vec![0, 256]);
-        heightmaps.insert("MOTION_BLOCKING", array)?;
+        let array = nbt::Value::List(vec![nbt::Value::Long(0); 37]);
+        heightmaps.insert("MOTION_BLOCKING", array.clone())?;
+        // heightmaps.insert("WORLD_SURFACE", array)?;
 
+        println!("{}", heightmaps);
         heightmaps.to_writer(&mut self.built_data)?;
 
         self.write_var_int(0)?;
@@ -406,7 +410,7 @@ impl PacketBuilder {
     pub fn write_respawn(&mut self) -> IResult<()> {
         self.set_packet_id(PacketId::Respawn);
 
-        self.write_string("natural".to_string())?;
+        self.write_string("minecraft:overworld".to_string())?;
         self.write_string("minecraft:overworld".to_string())?;
         self.write_long(100)?;
         self.write_unsigned_byte(0)?;
@@ -416,6 +420,22 @@ impl PacketBuilder {
         self.write_byte(0b01 | 0b10)?;
         self.write_boolean(false)?;
         self.write_var_int(10)?;
+
+        Ok(())
+    }
+
+    pub fn write_synchronize_player_position(&mut self) -> IResult<()> {
+        self.set_packet_id(PacketId::SynchronizePlayerPosition);
+
+        self.write_double(0.)?;
+        self.write_double(0.)?;
+        self.write_double(0.)?;
+
+        self.write_float(0.)?;
+        self.write_float(0.)?;
+
+        self.write_byte(7)?;
+        self.write_var_int(0x55)?;
 
         Ok(())
     }

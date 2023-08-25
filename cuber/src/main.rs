@@ -4,7 +4,7 @@ pub mod protocol;
 
 use protocol::packet::PacketBuilder;
 
-use std::{net::Ipv4Addr, io};
+use std::{io, net::Ipv4Addr};
 use tokio::net::TcpListener;
 
 use crate::protocol::packet::EntityId;
@@ -14,6 +14,8 @@ extern crate num_derive;
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
+    read_test();
+
     let listener = TcpListener::bind((Ipv4Addr::new(127, 0, 0, 1), 25565))
         .await
         .unwrap();
@@ -63,30 +65,72 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         pb.write_held_item(0)?;
         client.send_packet(pb).await?;
 
+        /*
         let mut pb = PacketBuilder::new();
         pb.write_chunk_data_update_light()?;
         client.send_packet(pb).await?;
+        */
 
+        /*
+        let mut pb = PacketBuilder::new();
+        pb.write_synchronize_player_position()?;
+        client.send_packet(pb).await?;
+        */
+
+        /*
         let mut pb = PacketBuilder::new();
         pb.write_spawn_player(uuid)?;
+        client.send_packet(pb).await?;
+        */
+        let mut pb = PacketBuilder::new();
+        pb.write_spawn_entity(uuid)?;
         client.send_packet(pb).await?;
 
         /*
         let mut pb = PacketBuilder::new();
-        pb.write_spawn_entity(uuid)?;
+        pb.write_respawn()?;
         client.send_packet(pb).await?;
         */
 
-        let mut pb = PacketBuilder::new();
-        pb.write_respawn()?;
-        client.send_packet(pb).await?;
+        println!("sent all packets");
 
-        client.get_packet().await?;
+        loop {
+            let packet = client.get_packet().await?;
+            println!("{:?}", packet);
+
+            let mut pb = PacketBuilder::new();
+            pb.write_synchronize_player_position()?;
+            client.send_packet(pb).await?;
+        }
     }
 }
 
 fn read_mock_nbt_blob() -> std::io::Result<nbt::Blob> {
     use std::fs;
-    let f = fs::File::open("../1_20_1_codec.bin")?;
-    Ok(nbt::de::from_reader(f)?)
+    use std::io::{Read, Write};
+
+    let mut f = fs::File::open("../1_20_1_codec.bin")?;
+    let r = Ok(nbt::de::from_reader(&mut f)?);
+
+    let mut remain = vec![];
+    f.read_to_end(&mut remain).unwrap();
+
+    let mut f = fs::File::create("result")?;
+    f.write_all(&remain).unwrap();
+
+    r
+}
+
+fn read_test() {
+    use std::fs;
+    use std::io::{Read, Write};
+    let mut f = fs::File::open("../chunk_data.bin").unwrap();
+    let r: nbt::Blob = nbt::de::from_reader(&mut f).unwrap();
+
+    println!("{}", r);
+    let mut remain = vec![];
+    f.read_to_end(&mut remain).unwrap();
+
+    let mut f = fs::File::create("result").unwrap();
+    f.write_all(&remain).unwrap();
 }

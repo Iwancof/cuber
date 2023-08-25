@@ -4,7 +4,7 @@ use super::TIResult;
 
 #[derive(Debug)]
 pub struct MinecraftClient {
-    socket: tokio::net::TcpStream,
+    pub socket: tokio::net::TcpStream,
     state: ClientState,
 }
 
@@ -51,7 +51,7 @@ impl MinecraftClient {
 
         let data = pb.to_packet_bytes();
         let l = data.len();
-        dbg!("[sent]");
+        // dbg!("[sent]");
         println!("{:?}", data);
         self.socket.write_all(&data).await?;
 

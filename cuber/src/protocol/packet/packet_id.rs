@@ -32,6 +32,7 @@ pub enum PacketId {
     UpdateRecipes,
     ChunkDataAndUpdateLight,
     Respawn,
+    SynchronizePlayerPosition,
 
     // Meta
     Unset,
@@ -103,6 +104,7 @@ impl PacketId {
             Self::UpdateRecipes => 0x6d,
             Self::ChunkDataAndUpdateLight => 0x24,
             Self::Respawn => 0x41,
+            Self::SynchronizePlayerPosition => 0x3c,
 
             Self::Unset => {
                 unreachable!("Unset")

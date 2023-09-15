@@ -6,11 +6,11 @@ use byteorder::ReadBytesExt;
 const VARINT_SEGMENT_BITS: u8 = 0x7f;
 const VARINT_CONTINUE_BIT: u8 = 0x80;
 
-use super::{SResult, AResult};
+use super::CResult;
 
 pub async fn async_read_var_int<T: AsyncReadExt + Unpin>(
     d: &mut T,
-) -> AResult<(usize, i32)> {
+) -> CResult<(usize, i32)> {
     let mut value = 0;
     let mut position = 0;
     let mut read = 0;
@@ -31,14 +31,14 @@ pub async fn async_read_var_int<T: AsyncReadExt + Unpin>(
             return Err(tokio::io::Error::new(
                 tokio::io::ErrorKind::InvalidData,
                 "VarInt is too big",
-            ));
+            ).into());
         }
     }
 
     Ok((read, value))
 }
 
-pub fn read_var_int<T: ReadBytesExt>(d: &mut T) -> SResult<(usize, i32)> {
+pub fn read_var_int<T: ReadBytesExt>(d: &mut T) -> CResult<(usize, i32)> {
     let mut value = 0;
     let mut position = 0;
     let mut read = 0;
@@ -59,7 +59,7 @@ pub fn read_var_int<T: ReadBytesExt>(d: &mut T) -> SResult<(usize, i32)> {
             return Err(std::io::Error::new(
                 std::io::ErrorKind::InvalidData,
                 "VarInt is too big",
-            ));
+            ).into());
         }
     }
 

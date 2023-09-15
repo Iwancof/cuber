@@ -105,12 +105,22 @@ dependencies = [
  "anyhow",
  "bitflags 2.4.0",
  "byteorder",
+ "deriver",
  "hematite-nbt",
  "nom",
  "num-derive",
  "num-traits",
  "tokio",
  "uuid",
+]
+
+[[package]]
+name = "deriver"
+version = "0.1.0"
+dependencies = [
+ "proc-macro2",
+ "quote",
+ "syn",
 ]
 
 [[package]]

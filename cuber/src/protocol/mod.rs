@@ -1,36 +1,54 @@
 pub mod client_bound;
-pub mod server_bound;
 pub mod primitive;
+pub mod server_bound;
 
-use std::io::{Write, BufWriter};
+use std::io::{BufWriter, Cursor, Read, Write};
 
-pub use std::io::Result as SResult;
-pub use tokio::io::Result as AResult;
+type CResult<T> = Result<T, anyhow::Error>;
 
-struct Client;
+pub struct Client;
 
 #[derive(Clone, Debug)]
-struct Packet {
+pub struct BuiltPacket {
     buf: Box<[u8]>,
 }
 
-impl Packet {
-    async fn send(self, _client: &mut Client) -> AResult<usize> {
+impl BuiltPacket {
+    pub async fn send(self, _client: &mut Client) -> CResult<usize> {
         todo!()
     }
 }
 
-trait Encodable {
+pub trait Encodable {
     fn encode<T: Write>(&self, writer: &mut T) -> usize;
 
     fn to_bytes(&self) -> Vec<u8> {
         let mut buf: BufWriter<Vec<u8>> = BufWriter::new(Vec::new());
-        self.encode(buf);
+        self.encode(&mut buf);
 
         buf.into_inner().unwrap()
     }
-    fn to_packet(&self) -> Packet {
-        Packet { buf: self.to_bytes().into_boxed_slice() }
+    fn to_packet(&self) -> BuiltPacket {
+        BuiltPacket {
+            buf: self.to_bytes().into_boxed_slice(),
+        }
     }
 }
 
+#[derive(Clone, Debug)]
+pub struct ReceivedPacket {
+    buf: Cursor<Box<[u8]>>,
+}
+
+pub trait Decodable: Sized {
+    fn decode<T: Read>(reader: &mut T) -> CResult<Self>;
+
+    fn from_packet(mut packet: ReceivedPacket) -> CResult<Self> {
+        let object = Self::decode(&mut packet.buf)?;
+        let remain = packet.buf.get_ref().len() - packet.buf.position() as usize;
+
+        assert_eq!(remain , 0);
+
+        Ok(object)
+    }
+}

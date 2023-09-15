@@ -1,13 +1,16 @@
-use super::{IResult, TIResult};
+use tokio::io::AsyncReadExt;
+use std::marker::Unpin;
 
 use byteorder::ReadBytesExt;
 
 const VARINT_SEGMENT_BITS: u8 = 0x7f;
 const VARINT_CONTINUE_BIT: u8 = 0x80;
 
-pub async fn async_read_var_int<T: tokio::io::AsyncReadExt + std::marker::Unpin>(
+use super::{SResult, AResult};
+
+pub async fn async_read_var_int<T: AsyncReadExt + Unpin>(
     d: &mut T,
-) -> TIResult<(usize, i32)> {
+) -> AResult<(usize, i32)> {
     let mut value = 0;
     let mut position = 0;
     let mut read = 0;
@@ -35,7 +38,7 @@ pub async fn async_read_var_int<T: tokio::io::AsyncReadExt + std::marker::Unpin>
     Ok((read, value))
 }
 
-pub fn read_var_int<T: ReadBytesExt>(d: &mut T) -> IResult<(usize, i32)> {
+pub fn read_var_int<T: ReadBytesExt>(d: &mut T) -> SResult<(usize, i32)> {
     let mut value = 0;
     let mut position = 0;
     let mut read = 0;

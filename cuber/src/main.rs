@@ -1,23 +1,27 @@
 pub mod protocol;
 
+use std::marker::PhantomData;
 use std::net::Ipv4Addr;
 
+use protocol::primitive::VarInt;
 use protocol::receive_packet_plain_no_compress;
 use protocol::CResult;
-use tokio::{net::TcpListener};
+use tokio::net::TcpListener;
+
+use protocol::primitive::Array;
 
 #[tokio::main]
 async fn main() -> CResult<()> {
     let listener = TcpListener::bind((Ipv4Addr::new(127, 0, 0, 1), 25565)).await?;
-    
-    while let Ok((mut socket ,addr)) = listener.accept().await {
+
+    while let Ok((mut socket, addr)) = listener.accept().await {
         println!("Connection from {addr}");
         let mut packet = receive_packet_plain_no_compress(&mut socket).await?;
-        
+
         use protocol::server_bound::PacketCluster;
         let result = protocol::server_bound::Handshaking::parse(&mut packet)?;
         dbg!(result);
     }
-    
+
     Ok(())
 }

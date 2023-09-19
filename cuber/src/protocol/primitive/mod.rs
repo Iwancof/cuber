@@ -238,10 +238,10 @@ where
     }
 }
 
-#[derive(Debug, PartialEq, Eq, Clone, Hash)]
+#[derive(PartialEq, Eq, Clone, Hash)]
 pub struct Array<L, T> {
-    inner: Vec<T>,
-    _phantom: PhantomData<fn(L) -> ()>,
+    pub inner: Vec<T>,
+    pub _phantom: PhantomData<fn(L) -> ()>,
 }
 impl<L, Inner> Encodable for Array<L, Inner>
 where
@@ -279,6 +279,21 @@ where
     }
 }
 
+impl<L, Inner> std::fmt::Debug for Array<L, Inner>
+where
+    Inner: std::fmt::Debug,
+{
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        use std::any::type_name;
+        f.debug_struct(&format!(
+            "Array<{}, {}>",
+            type_name::<L>(),
+            type_name::<Inner>()
+        ))
+        .field("inner", &&self.inner)
+        .finish()
+    }
+}
 impl<L, Inner> Array<L, Inner> {
     #[allow(unused)]
     pub fn iter(&self) -> Iter<Inner> {

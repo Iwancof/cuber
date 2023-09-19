@@ -6,42 +6,32 @@ use std::io::{BufWriter, Cursor, Read, Write};
 
 use tokio::io::AsyncReadExt;
 
-use crate::protocol::primitive::{VarInt, leb128::async_read_var_int};
+use crate::protocol::primitive::{leb128::async_read_var_int, VarInt};
 
 pub type CResult<T> = Result<T, anyhow::Error>;
+
+#[derive(PartialEq, Eq, Clone, Copy, Debug, Hash)]
+pub enum State {
+    Handshaking,
+    Status,
+    Login,
+    Play,
+}
 
 pub struct Client;
 
 #[derive(Clone, Debug)]
 pub struct BuiltPacket {
-    buf: Box<[u8]>,
-}
-
-impl BuiltPacket {
-    pub async fn send(self, _client: &mut Client) -> CResult<usize> {
-        todo!()
-    }
+    buf: Box<[u8]>, // plain data.
 }
 
 pub trait Encodable {
     fn encode<T: Write>(&self, writer: &mut T) -> usize;
-
-    fn to_bytes(&self) -> Vec<u8> {
-        let mut buf: BufWriter<Vec<u8>> = BufWriter::new(Vec::new());
-        self.encode(&mut buf);
-
-        buf.into_inner().unwrap()
-    }
-    fn to_packet(&self) -> BuiltPacket {
-        BuiltPacket {
-            buf: self.to_bytes().into_boxed_slice(),
-        }
-    }
 }
 
 #[derive(Clone, Debug)]
 pub struct ReceivedPacket {
-    buf: Cursor<Box<[u8]>>,
+    buf: Cursor<Box<[u8]>>, // plain data.
 }
 
 impl Read for ReceivedPacket {
@@ -60,18 +50,19 @@ impl Drop for ReceivedPacket {
 }
 
 // TODO: change by connection configure.
-pub async fn receive_packet_plain_no_compress<T: tokio::io::AsyncRead + Unpin>(reader: &mut T) -> CResult<ReceivedPacket> {
+pub async fn receive_packet_plain_no_compress<T: tokio::io::AsyncRead + Unpin>(
+    reader: &mut T,
+) -> CResult<ReceivedPacket> {
     let length = async_read_var_int(reader).await?.1 as _;
     let mut buffer = vec![0; length];
-    
+
     reader.read_exact(&mut buffer).await?;
-    
+
     Ok(ReceivedPacket {
-        buf: Cursor::new(buffer.into_boxed_slice())
+        buf: Cursor::new(buffer.into_boxed_slice()),
     })
 }
 
 pub trait Decodable: Sized {
     fn decode<T: Read>(reader: &mut T) -> CResult<Self>;
 }
-

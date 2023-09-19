@@ -71,8 +71,8 @@ macro_rules! define_server_bound_packets {
     };
 }
 
-#[derive(Debug)]
-enum HandshakeNextState {
+#[derive(Debug, PartialEq, Eq, Clone, Copy, Hash)]
+pub enum HandshakeNextState {
     Status,
     Login,
 }
@@ -97,10 +97,10 @@ define_server_bound_packets! {
         #[sb_packet(0)]
         #[derive(Decodable, Debug)]
         pub struct Handshake {
-            protocol_version: VarInt,
-            server_address: String,
-            server_port: u16,
-            next_state: HandshakeNextState,
+            pub protocol_version: VarInt,
+            pub server_address: String,
+            pub server_port: u16,
+            pub next_state: HandshakeNextState,
         }
 
         #[sb_packet(0xfe)]
@@ -134,22 +134,22 @@ define_server_bound_packets! {
         #[sb_packet(0)]
         #[derive(Decodable, Debug, PartialEq, Eq, Clone, Hash)]
         pub struct LoginStart {
-            name: String,
-            uuid: BoolConditional<Uuid>,
+            pub name: String,
+            pub uuid: BoolConditional<Uuid>,
         }
 
         #[sb_packet(1)]
         #[derive(Decodable, Debug, PartialEq, Eq, Clone, Hash)]
         pub struct EncryptionResponse {
-            shared_secret: Array<VarInt, u8>,
-            verify_token: Array<VarInt, u8>,
+            pub shared_secret: Array<VarInt, u8>,
+            pub verify_token: Array<VarInt, u8>,
         }
 
         #[sb_packet(2)]
         #[derive(Decodable, Debug, PartialEq, Eq, Clone, Hash)]
         pub struct PluginResponse {
-            message_id: VarInt,
-            data: BoolConditional<Array<VarInt, u8>>,
+            pub message_id: VarInt,
+            pub data: BoolConditional<Array<VarInt, u8>>,
         }
     }
 }

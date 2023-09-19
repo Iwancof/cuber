@@ -193,7 +193,7 @@ impl Decodable for Uuid {
 }
 
 #[derive(Debug, PartialEq, Eq, Clone, Hash)]
-pub struct BoolConditional<T>(Option<T>);
+pub struct BoolConditional<T>(pub Option<T>);
 
 impl<Inner> Encodable for BoolConditional<Inner>
 where
@@ -297,6 +297,14 @@ where
         ))
         .field("inner", &&self.inner)
         .finish()
+    }
+}
+impl<L, Inner> From<Vec<Inner>> for Array<L, Inner> {
+    fn from(value: Vec<Inner>) -> Self {
+        Self {
+            inner: value,
+            _phantom: PhantomData,
+        }
     }
 }
 impl<L, Inner> Array<L, Inner> {

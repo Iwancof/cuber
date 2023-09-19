@@ -4,7 +4,7 @@ pub mod server_bound;
 
 use std::io::{BufWriter, Cursor, Read, Write};
 
-use tokio::io::AsyncReadExt;
+use tokio::io::{AsyncReadExt, AsyncWrite};
 
 use crate::protocol::primitive::{leb128::async_read_var_int, VarInt};
 
@@ -23,6 +23,17 @@ pub struct Client;
 #[derive(Clone, Debug)]
 pub struct BuiltPacket {
     buf: Box<[u8]>, // plain data.
+}
+
+// TODO: replace `T` with `Client`
+pub async fn send_packet_plain_no_compression<T: AsyncWrite + Unpin>(
+    writer: &mut T,
+    packet: BuiltPacket,
+) -> usize {
+    use tokio::io::AsyncWriteExt;
+    writer.write_all(&packet.buf).await.unwrap();
+
+    packet.buf.len()
 }
 
 pub trait Encodable {
@@ -50,7 +61,7 @@ impl Drop for ReceivedPacket {
 }
 
 // TODO: change by connection configure.
-pub async fn receive_packet_plain_no_compress<T: tokio::io::AsyncRead + Unpin>(
+pub async fn receive_packet_plain_no_compression<T: tokio::io::AsyncRead + Unpin>(
     reader: &mut T,
 ) -> CResult<ReceivedPacket> {
     let length = async_read_var_int(reader).await?.1 as _;

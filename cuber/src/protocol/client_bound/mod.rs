@@ -14,7 +14,7 @@ pub trait ClientBoundPacket: Encodable {
     const PACKET_ID: i32;
     const VALID_STATE: State;
 
-    fn verify(current_state: State) {
+    fn verify(&self, current_state: State) {
         assert_eq!(current_state, Self::VALID_STATE);
     }
     fn to_bytes(&self) -> Box<[u8]> {
@@ -54,12 +54,12 @@ structstruck::strike! {
     #[cb_packet(State::Login, 0x02)]
     #[derive(Encodable, Debug, PartialEq, Eq, Clone)]
     pub struct LoginSuccess {
-        uuid: Uuid,
-        user_name: String,
-        property: Array<VarInt, #[derive(Encodable, Debug, PartialEq, Eq, Clone)] pub struct LoginSuccessProperty {
-            name: String,
-            value: String,
-            signature: BoolConditional<String>,
+        pub uuid: Uuid,
+        pub user_name: String,
+        pub property: Array<VarInt, #[derive(Encodable, Debug, PartialEq, Eq, Clone)] pub struct LoginSuccessProperty {
+            pub name: String,
+            pub value: String,
+            pub signature: BoolConditional<String>,
         }>,
     }
 }

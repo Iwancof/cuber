@@ -11,7 +11,6 @@ use byteorder::{NetworkEndian, ReadBytesExt, WriteBytesExt};
 use std::io::{ErrorKind, Read, Write};
 use std::marker::PhantomData;
 use std::slice::{Iter, IterMut};
-use std::str::EncodeUtf16;
 use uuid::Uuid;
 
 macro_rules! write_primitive {
@@ -97,7 +96,7 @@ define_prim!(u128, write_u128, read_u128);
 define_prim!(f32, write_f32, read_f32);
 define_prim!(f64, write_f64, read_f64);
 
-#[derive(Debug, PartialEq, Eq, Clone, Copy)]
+#[derive(Debug, PartialEq, Eq, Hash, Clone, Copy)]
 pub struct VarInt(i32);
 
 impl Encodable for VarInt {
@@ -165,12 +164,12 @@ impl Decodable for String {
     }
 }
 
-#[derive(Encodable, Decodable, PartialEq, Eq, Clone)]
+#[derive(Encodable, Decodable, PartialEq, Eq, Clone, Hash)]
 pub struct Chat {
     buf: String,
 }
 
-#[derive(Encodable, Decodable, PartialEq, Eq, Clone)]
+#[derive(Encodable, Decodable, PartialEq, Eq, Clone, Hash)]
 pub struct Identifier {
     buf: String,
 }
@@ -188,7 +187,7 @@ impl Decodable for Uuid {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, PartialEq, Eq, Clone, Hash)]
 pub struct BoolConditional<T>(Option<T>);
 
 impl<Inner> Encodable for BoolConditional<Inner>
@@ -221,10 +220,7 @@ where
     }
 }
 
-#[derive(Debug)]
-pub struct FixedArray<const L: usize, T>([T; L]);
-
-impl<const L: usize, Inner> Encodable for FixedArray<L, Inner>
+impl<const L: usize, Inner> Encodable for [Inner; L]
 where
     Inner: Encodable,
 {
@@ -233,27 +229,16 @@ where
     }
 }
 
-impl<const L: usize, Inner> Decodable for FixedArray<L, Inner>
+impl<const L: usize, Inner> Decodable for [Inner; L]
 where
     Inner: Decodable,
 {
     fn decode<T: Read>(reader: &mut T) -> CResult<Self> {
-        Ok(Self(array_macro::array![_ => Inner::decode(reader)?; L]))
-    }
-}
-impl<const L: usize, Inner> FixedArray<L, Inner> {
-    #[allow(unused)]
-    pub fn iter(&self) -> Iter<Inner> {
-        self.0.iter()
-    }
-
-    #[allow(unused)]
-    pub fn iter_mut(&mut self) -> IterMut<Inner> {
-        self.0.iter_mut()
+        Ok(array_macro::array![_ => Inner::decode(reader)?; L])
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, PartialEq, Eq, Clone, Hash)]
 pub struct Array<L, T> {
     inner: Vec<T>,
     _phantom: PhantomData<fn(L) -> ()>,
@@ -302,6 +287,16 @@ impl<L, Inner> Array<L, Inner> {
     #[allow(unused)]
     pub fn iter_mut(&mut self) -> IterMut<Inner> {
         self.inner.iter_mut()
+    }
+    #[allow(unused)]
+    pub fn from_fixed<const LENGTH: usize>(fixed: [Inner; LENGTH]) -> Self
+    where
+        Inner: Clone,
+    {
+        Self {
+            inner: fixed.to_vec(),
+            _phantom: PhantomData,
+        }
     }
 }
 

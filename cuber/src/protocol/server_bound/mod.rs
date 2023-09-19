@@ -1,3 +1,4 @@
+use super::primitive::Array;
 use super::CResult;
 use super::{primitive::BoolConditional, primitive::VarInt, Decodable};
 use deriver::Decodable;
@@ -131,10 +132,24 @@ define_server_bound_packets! {
     #[derive(Debug)]
     pub enum Login {
         #[sb_packet(0)]
-        #[derive(Decodable, Debug)]
+        #[derive(Decodable, Debug, PartialEq, Eq, Clone, Hash)]
         pub struct LoginStart {
             name: String,
             uuid: BoolConditional<Uuid>,
+        }
+
+        #[sb_packet(1)]
+        #[derive(Decodable, Debug, PartialEq, Eq, Clone, Hash)]
+        pub struct EncryptionResponse {
+            shared_secret: Array<VarInt, u8>,
+            verify_token: Array<VarInt, u8>,
+        }
+
+        #[sb_packet(2)]
+        #[derive(Decodable, Debug, PartialEq, Eq, Clone, Hash)]
+        pub struct PluginResponse {
+            message_id: VarInt,
+            data: BoolConditional<Array<VarInt, u8>>,
         }
     }
 }

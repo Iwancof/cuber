@@ -135,6 +135,11 @@ impl TryInto<usize> for VarInt {
         Ok(self.0 as usize)
     }
 }
+impl From<usize> for VarInt {
+    fn from(value: usize) -> Self {
+        Self(value as _)
+    }
+}
 impl VarInt {
     fn inner(self) -> i32 {
         self.0
@@ -164,12 +169,12 @@ impl Decodable for String {
     }
 }
 
-#[derive(Encodable, Decodable, PartialEq, Eq, Clone, Hash)]
+#[derive(Encodable, Decodable, Debug, PartialEq, Eq, Clone, Hash)]
 pub struct Chat {
     buf: String,
 }
 
-#[derive(Encodable, Decodable, PartialEq, Eq, Clone, Hash)]
+#[derive(Encodable, Decodable, Debug, PartialEq, Eq, Clone, Hash)]
 pub struct Identifier {
     buf: String,
 }
@@ -317,7 +322,7 @@ impl<L, Inner> Array<L, Inner> {
 
 #[cfg(test)]
 mod tests {
-    use std::io::Cursor;
+    use std::io::{BufWriter, Cursor};
 
     use crate::protocol::ReceivedPacket;
 
@@ -342,10 +347,12 @@ mod tests {
             s: "helloworld".into(),
         };
 
-        let bytes = tt.clone().to_bytes();
+        let buf = Vec::new();
+        let mut buf_writer = BufWriter::new(buf);
+        tt.clone().encode(&mut buf_writer);
 
         let mut rp = ReceivedPacket {
-            buf: Cursor::new(bytes.into_boxed_slice()),
+            buf: Cursor::new(buf_writer.into_inner().unwrap().into_boxed_slice()),
         };
 
         let r = TestType::decode(&mut rp);

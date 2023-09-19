@@ -11,6 +11,7 @@ use byteorder::{NetworkEndian, ReadBytesExt, WriteBytesExt};
 use std::io::{ErrorKind, Read, Write};
 use std::marker::PhantomData;
 use std::slice::{Iter, IterMut};
+use std::str::EncodeUtf16;
 use uuid::Uuid;
 
 macro_rules! write_primitive {
@@ -174,6 +175,12 @@ pub struct Identifier {
     buf: String,
 }
 
+impl Encodable for Uuid {
+    fn encode<T: Write>(&self, writer: &mut T) -> usize {
+        self.as_u128().encode(writer)
+    }
+}
+
 impl Decodable for Uuid {
     fn decode<T: Read>(reader: &mut T) -> CResult<Self> {
         let raw = u128::decode(reader)?;
@@ -182,9 +189,25 @@ impl Decodable for Uuid {
 }
 
 #[derive(Debug)]
-pub struct BoolConditional<T>(Option<T>)
+pub struct BoolConditional<T>(Option<T>);
+
+impl<Inner> Encodable for BoolConditional<Inner>
 where
-    T: Decodable;
+    Inner: Encodable,
+{
+    fn encode<T: Write>(&self, writer: &mut T) -> usize {
+        match &self.0 {
+            Some(obj) => {
+                let mut written = 0;
+                written += true.encode(writer);
+                written += obj.encode(writer);
+
+                return written;
+            }
+            None => false.encode(writer),
+        }
+    }
+}
 
 impl<Inner> Decodable for BoolConditional<Inner>
 where
@@ -200,6 +223,15 @@ where
 
 #[derive(Debug)]
 pub struct FixedArray<const L: usize, T>([T; L]);
+
+impl<const L: usize, Inner> Encodable for FixedArray<L, Inner>
+where
+    Inner: Encodable,
+{
+    fn encode<T: Write>(&self, writer: &mut T) -> usize {
+        self.iter().map(|inner| inner.encode(writer)).sum()
+    }
+}
 
 impl<const L: usize, Inner> Decodable for FixedArray<L, Inner>
 where
@@ -226,6 +258,21 @@ pub struct Array<L, T> {
     inner: Vec<T>,
     _phantom: PhantomData<fn(L) -> ()>,
 }
+impl<L, Inner> Encodable for Array<L, Inner>
+where
+    Inner: Encodable,
+    L: Encodable + From<usize>,
+{
+    fn encode<T: Write>(&self, writer: &mut T) -> usize {
+        let mut written = 0;
+
+        let l = L::from(self.inner.len());
+        written += l.encode(writer);
+        written += self.iter().map(|inner| inner.encode(writer)).sum::<usize>();
+
+        written
+    }
+}
 impl<L, Inner> Decodable for Array<L, Inner>
 where
     Inner: Decodable,
@@ -249,11 +296,11 @@ where
 
 impl<L, Inner> Array<L, Inner> {
     #[allow(unused)]
-    fn iter(&self) -> Iter<Inner> {
+    pub fn iter(&self) -> Iter<Inner> {
         self.inner.iter()
     }
     #[allow(unused)]
-    fn iter_mut(&mut self) -> IterMut<Inner> {
+    pub fn iter_mut(&mut self) -> IterMut<Inner> {
         self.inner.iter_mut()
     }
 }

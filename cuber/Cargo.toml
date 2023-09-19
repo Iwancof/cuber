@@ -17,3 +17,4 @@ tokio = { version = "1.32.0", features = ["full"] }
 uuid = "1.4.1"
 
 deriver = { path = "./deriver" }
+packet_id = { version = "0.1.0", path = "./packet_id" }

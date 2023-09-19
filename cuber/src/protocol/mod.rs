@@ -4,7 +4,11 @@ pub mod server_bound;
 
 use std::io::{BufWriter, Cursor, Read, Write};
 
-type CResult<T> = Result<T, anyhow::Error>;
+use tokio::io::AsyncReadExt;
+
+use crate::protocol::primitive::{VarInt, leb128::async_read_var_int};
+
+pub type CResult<T> = Result<T, anyhow::Error>;
 
 pub struct Client;
 
@@ -40,15 +44,33 @@ pub struct ReceivedPacket {
     buf: Cursor<Box<[u8]>>,
 }
 
+impl Read for ReceivedPacket {
+    fn read(&mut self, buf: &mut [u8]) -> std::io::Result<usize> {
+        std::io::Read::read(&mut self.buf, buf)
+    }
+}
+
+impl Drop for ReceivedPacket {
+    fn drop(&mut self) {
+        let remain = self.buf.get_ref().len() - self.buf.position() as usize;
+        if remain != 0 {
+            panic!("Unprocessed byte sequence remains. {} byte(s)", remain);
+        }
+    }
+}
+
+// TODO: change by connection configure.
+pub async fn receive_packet_plain_no_compress<T: tokio::io::AsyncRead + Unpin>(reader: &mut T) -> CResult<ReceivedPacket> {
+    let length = async_read_var_int(reader).await?.1 as _;
+    let mut buffer = vec![0; length];
+    
+    reader.read_exact(&mut buffer).await?;
+    
+    Ok(ReceivedPacket {
+        buf: Cursor::new(buffer.into_boxed_slice())
+    })
+}
+
 pub trait Decodable: Sized {
     fn decode<T: Read>(reader: &mut T) -> CResult<Self>;
-
-    fn from_packet(mut packet: ReceivedPacket) -> CResult<Self> {
-        let object = Self::decode(&mut packet.buf)?;
-        let remain = packet.buf.get_ref().len() - packet.buf.position() as usize;
-
-        assert_eq!(remain , 0);
-
-        Ok(object)
-    }
 }

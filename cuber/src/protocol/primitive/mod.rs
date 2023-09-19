@@ -90,7 +90,7 @@ define_prim!(f32, write_f32, read_f32);
 define_prim!(f64, write_f64, read_f64);
 
 #[derive(Debug, PartialEq, Eq, Clone, Copy)]
-struct VarInt(i32);
+pub struct VarInt(i32);
 
 impl Encodable for VarInt {
     fn encode<T: Write>(&self, writer: &mut T) -> usize {
@@ -145,12 +145,12 @@ impl Decodable for String {
 }
 
 #[derive(Encodable, Decodable, PartialEq, Eq, Clone)]
-struct Chat {
+pub struct Chat {
     buf: String,
 }
 
 #[derive(Encodable, Decodable, PartialEq, Eq, Clone)]
-struct Identifier {
+pub struct Identifier {
     buf: String,
 }
 

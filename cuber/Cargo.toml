@@ -18,3 +18,4 @@ uuid = "1.4.1"
 
 deriver = { path = "./deriver" }
 packet_id = { version = "0.1.0", path = "./packet_id" }
+array-macro = "2.1.5"

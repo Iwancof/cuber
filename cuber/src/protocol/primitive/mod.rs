@@ -8,7 +8,10 @@ use super::{Decodable, Encodable};
 use deriver::{Decodable, Encodable};
 
 use byteorder::{NetworkEndian, ReadBytesExt, WriteBytesExt};
-use std::io::{Read, Write};
+use std::io::{ErrorKind, Read, Write};
+use std::marker::PhantomData;
+use std::slice::{Iter, IterMut};
+use uuid::Uuid;
 
 macro_rules! write_primitive {
     ($writer: ident, write_u8, $value: expr) => {{
@@ -85,7 +88,11 @@ define_prim!(u8, write_u8, read_u8);
 define_prim!(i16, write_i16, read_i16);
 define_prim!(u16, write_u16, read_u16);
 define_prim!(i32, write_i32, read_i32);
+define_prim!(u32, write_u32, read_u32);
 define_prim!(i64, write_i64, read_i64);
+define_prim!(u64, write_u64, read_u64);
+define_prim!(i128, write_i128, read_i128);
+define_prim!(u128, write_u128, read_u128);
 define_prim!(f32, write_f32, read_f32);
 define_prim!(f64, write_f64, read_f64);
 
@@ -113,6 +120,19 @@ impl From<i32> for VarInt {
 impl From<VarInt> for i32 {
     fn from(value: VarInt) -> Self {
         value.0
+    }
+}
+impl TryInto<usize> for VarInt {
+    type Error = anyhow::Error;
+    fn try_into(self) -> Result<usize, Self::Error> {
+        if self.0 < 0 {
+            return Err(std::io::Error::new(
+                ErrorKind::InvalidData,
+                format!("could not convert to usize: {}", self.0),
+            )
+            .into());
+        }
+        Ok(self.0 as usize)
     }
 }
 impl VarInt {
@@ -154,6 +174,90 @@ pub struct Identifier {
     buf: String,
 }
 
+impl Decodable for Uuid {
+    fn decode<T: Read>(reader: &mut T) -> CResult<Self> {
+        let raw = u128::decode(reader)?;
+        Ok(Uuid::from_u128_le(raw))
+    }
+}
+
+#[derive(Debug)]
+pub struct BoolConditional<T>(Option<T>)
+where
+    T: Decodable;
+
+impl<Inner> Decodable for BoolConditional<Inner>
+where
+    Inner: Decodable,
+{
+    fn decode<T: Read>(reader: &mut T) -> CResult<Self> {
+        if !bool::decode(reader)? {
+            return Ok(Self(None));
+        }
+        return Ok(Self(Some(Inner::decode(reader)?)));
+    }
+}
+
+#[derive(Debug)]
+pub struct FixedArray<const L: usize, T>([T; L]);
+
+impl<const L: usize, Inner> Decodable for FixedArray<L, Inner>
+where
+    Inner: Decodable,
+{
+    fn decode<T: Read>(reader: &mut T) -> CResult<Self> {
+        Ok(Self(array_macro::array![_ => Inner::decode(reader)?; L]))
+    }
+}
+impl<const L: usize, Inner> FixedArray<L, Inner> {
+    #[allow(unused)]
+    pub fn iter(&self) -> Iter<Inner> {
+        self.0.iter()
+    }
+
+    #[allow(unused)]
+    pub fn iter_mut(&mut self) -> IterMut<Inner> {
+        self.0.iter_mut()
+    }
+}
+
+#[derive(Debug)]
+pub struct Array<L, T> {
+    inner: Vec<T>,
+    _phantom: PhantomData<fn(L) -> ()>,
+}
+impl<L, Inner> Decodable for Array<L, Inner>
+where
+    Inner: Decodable,
+    L: Decodable + TryInto<usize>,
+    <L as TryInto<usize>>::Error: Into<anyhow::Error>,
+{
+    fn decode<T: Read>(reader: &mut T) -> CResult<Self> {
+        let length: usize = L::decode(reader)?.try_into().map_err(|e| e.into())?;
+        let mut inner = Vec::new();
+
+        for _ in 0..length {
+            inner.push(Inner::decode(reader)?);
+        }
+
+        Ok(Self {
+            inner,
+            _phantom: PhantomData,
+        })
+    }
+}
+
+impl<L, Inner> Array<L, Inner> {
+    #[allow(unused)]
+    fn iter(&self) -> Iter<Inner> {
+        self.inner.iter()
+    }
+    #[allow(unused)]
+    fn iter_mut(&mut self) -> IterMut<Inner> {
+        self.inner.iter_mut()
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use std::io::Cursor;
@@ -183,9 +287,11 @@ mod tests {
 
         let bytes = tt.clone().to_bytes();
 
-        let rp = ReceivedPacket { buf: Cursor::new(bytes.into_boxed_slice()) };
+        let mut rp = ReceivedPacket {
+            buf: Cursor::new(bytes.into_boxed_slice()),
+        };
 
-        let r = TestType::from_packet(rp);
+        let r = TestType::decode(&mut rp);
 
         assert_eq!(r.unwrap(), tt);
     }

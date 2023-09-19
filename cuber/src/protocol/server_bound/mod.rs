@@ -1,8 +1,9 @@
-use super::{CResult, ReceivedPacket};
+use super::CResult;
+use super::{primitive::BoolConditional, primitive::VarInt, Decodable};
 use deriver::Decodable;
-use std::io::Read;
-use super::{primitive::VarInt, Decodable};
 use packet_id::sb_packet;
+use std::io::Read;
+use uuid::Uuid;
 
 pub trait ServerBoundPacket: Decodable {
     const PACKET_ID: i32;
@@ -32,13 +33,13 @@ macro_rules! define_server_bound_packets {
     } => {
         $(
             $(#[$struct_meta])*
-            $struct_vis struct $struct_ident { 
+            $struct_vis struct $struct_ident {
                 $(
                     $(#[$member_meta])* $member_vis $member: $member_type,
                 )*
             }
         )*
-        
+
         $(#[$enum_meta])*
         $enum_vis enum $enum_ident {
             $(
@@ -80,7 +81,11 @@ impl Decodable for HandshakeNextState {
         match VarInt::decode(reader)?.into() {
             1 => Ok(Self::Status),
             2 => Ok(Self::Login),
-            unk => Err(std::io::Error::new(std::io::ErrorKind::InvalidData, format!("Unknown next state: {}", unk)).into()),
+            unk => Err(std::io::Error::new(
+                std::io::ErrorKind::InvalidData,
+                format!("Unknown next state: {}", unk),
+            )
+            .into()),
         }
     }
 }
@@ -111,7 +116,7 @@ define_server_bound_packets! {
         #[sb_packet(0)]
         #[derive(Decodable, Debug)]
         pub struct StatusRequest {
-            
+
         }
 
         #[sb_packet(1)]
@@ -129,7 +134,7 @@ define_server_bound_packets! {
         #[derive(Decodable, Debug)]
         pub struct LoginStart {
             name: String,
-            has_player: bool,
+            uuid: BoolConditional<Uuid>,
         }
     }
 }

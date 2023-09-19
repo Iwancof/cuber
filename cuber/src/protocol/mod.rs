@@ -74,3 +74,4 @@ pub async fn receive_packet_plain_no_compress<T: tokio::io::AsyncRead + Unpin>(r
 pub trait Decodable: Sized {
     fn decode<T: Read>(reader: &mut T) -> CResult<Self>;
 }
+

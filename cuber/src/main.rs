@@ -1,20 +1,11 @@
 pub mod protocol;
 
-use std::marker::PhantomData;
 use std::net::Ipv4Addr;
 
-use protocol::client_bound::ClientBoundPacket;
 use protocol::client_bound::LoginSuccess;
-use protocol::primitive::VarInt;
-use protocol::receive_packet_plain_no_compression;
-use protocol::send_packet_plain_no_compression;
 use protocol::server_bound::HandshakeNextState;
-use protocol::server_bound::Handshaking;
-use protocol::server_bound::{Login, LoginStart};
 use protocol::{CResult, Client};
 use tokio::net::TcpListener;
-
-use protocol::primitive::Array;
 
 #[tokio::main]
 async fn main() -> CResult<()> {

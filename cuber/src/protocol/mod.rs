@@ -2,19 +2,13 @@ pub mod client_bound;
 pub mod primitive;
 pub mod server_bound;
 
-use std::io::{BufRead, Cursor, Read, Write};
+use std::io::{Cursor, Read, Write};
+use tokio::io::{AsyncReadExt, AsyncWrite, BufReader, BufWriter};
 
-use tokio::{
-    io::{AsyncReadExt, AsyncWrite, BufReader, BufWriter},
-    net::TcpStream,
-};
+use crate::protocol::primitive::leb128::async_read_var_int;
 
-use crate::protocol::primitive::{leb128::async_read_var_int, VarInt};
-
-use self::{
-    client_bound::ClientBoundPacket,
-    server_bound::{Handshaking, Login, PacketCluster, Status},
-};
+use client_bound::ClientBoundPacket;
+use server_bound::{Handshaking, Login, PacketCluster, Play, Status};
 
 pub type CResult<T> = Result<T, anyhow::Error>;
 
@@ -138,7 +132,9 @@ impl ReceivedPacket {
     pub fn as_login(mut self) -> CResult<Login> {
         Login::parse(&mut self)
     }
-    // TODO as_play
+    pub fn as_play(mut self) -> CResult<Play> {
+        Play::parse(&mut self)
+    }
 }
 
 // TODO: change by connection configure.

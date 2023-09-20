@@ -49,7 +49,7 @@ macro_rules! define_server_bound_packets {
         }
 
         impl PacketCluster for $enum_ident {
-            fn parse_with_id<T: std::io::Read>(id: i32, reader: &mut T) -> CResult<Self> {
+            fn parse_with_id<T: std::io::Read>(id: i32, #[allow(unused)] reader: &mut T) -> CResult<Self> {
                 #[deny(unreachable_patterns)]
                 match id {
                     $(
@@ -167,5 +167,11 @@ define_server_bound_packets! {
             pub message_id: VarInt,
             pub data: BoolConditional<Array<VarInt, u8>>,
         }
+    }
+}
+
+define_server_bound_packets! {
+    #[derive(Debug)]
+    pub enum Play {
     }
 }

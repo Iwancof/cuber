@@ -8,6 +8,7 @@ use super::{Decodable, Encodable};
 use deriver::{Decodable, Encodable};
 
 use byteorder::{NetworkEndian, ReadBytesExt, WriteBytesExt};
+use nbt::Blob;
 use std::io::{ErrorKind, Read, Write};
 use std::marker::PhantomData;
 use std::slice::{Iter, IterMut};
@@ -87,7 +88,7 @@ define_prim!(f64, write_f64, read_f64);
 
 impl Encodable for bool {
     fn encode<T: Write>(&self, writer: &mut T) -> usize {
-        (if *self { 1 } else { 0 }).encode(writer)
+        (if *self { 1_u8 } else { 0_u8 }).encode(writer)
     }
 }
 impl Decodable for bool {
@@ -97,7 +98,7 @@ impl Decodable for bool {
 }
 
 #[derive(Debug, PartialEq, Eq, Hash, Clone, Copy)]
-pub struct VarInt(i32);
+pub struct VarInt(pub i32);
 
 impl Encodable for VarInt {
     fn encode<T: Write>(&self, writer: &mut T) -> usize {
@@ -178,6 +179,23 @@ pub struct Chat {
 pub struct Identifier {
     buf: String,
 }
+impl From<String> for Identifier {
+    fn from(value: String) -> Self {
+        Self { buf: value }
+    }
+}
+impl From<&str> for Identifier {
+    fn from(value: &str) -> Self {
+        Self {
+            buf: value.to_string(),
+        }
+    }
+}
+impl From<Identifier> for String {
+    fn from(value: Identifier) -> Self {
+        value.buf
+    }
+}
 
 impl Encodable for Uuid {
     fn encode<T: Write>(&self, writer: &mut T) -> usize {
@@ -187,8 +205,87 @@ impl Encodable for Uuid {
 
 impl Decodable for Uuid {
     fn decode<T: Read>(reader: &mut T) -> CResult<Self> {
-        let raw = u128::decode(reader)?;
-        Ok(Uuid::from_u128_le(raw))
+        Ok(Self::from_u128_le(u128::decode(reader)?))
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub struct Position {
+    x: i32, // 26 bits
+    y: i32, // 12 bits
+    z: i32, // 26 bits
+}
+
+impl Position {
+    fn is_valid(&self) -> bool {
+        (-2_i32).pow(25) <= self.x
+            && self.x < 2_i32.pow(25)
+            && (-2_i32).pow(11) <= self.y
+            && self.y < 2_i32.pow(11)
+            && (-2_i32).pow(25) <= self.z
+            && self.z < 2_i32.pow(25)
+    }
+    pub fn new(x: i32, y: i32, z: i32) -> CResult<Self> {
+        let pos = Self { x, y, z };
+        if !pos.is_valid() {
+            return Err(std::io::Error::new(
+                ErrorKind::InvalidData,
+                format!("invalid position: {:?}", pos),
+            )
+            .into());
+        }
+        Ok(pos)
+    }
+    pub fn set_x(&mut self, x: i32) -> &mut Self {
+        self.x = x;
+        self
+    }
+    pub fn set_y(&mut self, y: i32) -> &mut Self {
+        self.y = y;
+        self
+    }
+    pub fn set_z(&mut self, z: i32) -> &mut Self {
+        self.z = z;
+        self
+    }
+    pub fn pack(&self) -> i64 {
+        let mut packed = 0_i64;
+        packed |= (self.x as i64 & 0x3ffffff) << 38;
+        packed |= (self.y as i64 & 0xfff) << 26;
+        packed |= self.z as i64 & 0x3ffffff;
+        packed
+    }
+    pub fn unpack(packed: i64) -> CResult<Self> {
+        Self::new(
+            ((packed >> 38) & 0x3ffffff) as i32,
+            ((packed << 52) >> 52) as i32,
+            ((packed << 26) >> 38) as i32,
+        )
+    }
+}
+
+impl Encodable for Position {
+    fn encode<T: Write>(&self, writer: &mut T) -> usize {
+        self.pack().encode(writer)
+    }
+}
+
+impl Decodable for Position {
+    fn decode<T: Read>(reader: &mut T) -> CResult<Self> {
+        Self::unpack(i64::decode(reader)?)
+    }
+}
+
+impl Encodable for Blob {
+    fn encode<T: Write>(&self, writer: &mut T) -> usize {
+        self.to_writer(writer).expect("could not write nbt data");
+        self.len_bytes()
+    }
+}
+
+impl Decodable for Blob {
+    fn decode<T: Read>(reader: &mut T) -> CResult<Self> {
+        Ok(Self::from_reader(reader)?)
     }
 }
 
@@ -222,6 +319,16 @@ where
             return Ok(Self(None));
         }
         return Ok(Self(Some(Inner::decode(reader)?)));
+    }
+}
+impl<Inner> From<Option<Inner>> for BoolConditional<Inner> {
+    fn from(value: Option<Inner>) -> Self {
+        Self(value)
+    }
+}
+impl<Inner> From<BoolConditional<Inner>> for Option<Inner> {
+    fn from(value: BoolConditional<Inner>) -> Self {
+        value.0
     }
 }
 
@@ -328,6 +435,19 @@ impl<L, Inner> Array<L, Inner> {
     }
 }
 
+#[derive(Debug, PartialEq, Eq, Clone, Copy, Hash)]
+pub struct Todo;
+impl Encodable for Todo {
+    fn encode<T: Write>(&self, _writer: &mut T) -> usize {
+        todo!()
+    }
+}
+impl Decodable for Todo {
+    fn decode<T: Read>(_reader: &mut T) -> CResult<Self> {
+        todo!()
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use std::io::{BufWriter, Cursor};
@@ -366,5 +486,23 @@ mod tests {
         let r = TestType::decode(&mut rp);
 
         assert_eq!(r.unwrap(), tt);
+    }
+
+    #[test]
+    fn position_unpack() {
+        let raw = 0b01000110000001110110001100_10110000010101101101001000_001100111111;
+        let Position { x, y, z } = Position::unpack(raw).unwrap();
+
+        assert_eq!(x, 18357644);
+        assert_eq!(y, 831);
+        assert_eq!(z, -20882616);
+    }
+
+    fn position_pack() {
+        let pos = Position::new(18357644, 831, -20882616).unwrap();
+        assert_eq!(
+            pos.pack(),
+            0b01000110000001110110001100_10110000010101101101001000_001100111111
+        );
     }
 }

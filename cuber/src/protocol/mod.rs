@@ -1,37 +1,23 @@
 pub mod client_bound;
+pub mod common;
 pub mod primitive;
 pub mod server_bound;
 
 use std::io::{Cursor, Read, Write};
 use tokio::io::{AsyncReadExt, AsyncWrite, BufReader, BufWriter};
 
-use crate::protocol::primitive::leb128::async_read_var_int;
-
 use client_bound::ClientBoundPacket;
+use common::*;
+use primitive::leb128::{async_read_var_int, build_var_int};
 use server_bound::{Handshaking, Login, PacketCluster, Play, Status};
 
 pub type CResult<T> = Result<T, anyhow::Error>;
 
-#[derive(PartialEq, Eq, Clone, Copy, Debug, Hash)]
-pub enum State {
-    Handshaking,
-    Status,
-    Login,
-    Play,
+pub trait Encodable {
+    fn encode<T: Write>(&self, writer: &mut T) -> usize;
 }
-
-#[derive(Debug, PartialEq, Eq, Clone, Copy, Hash)]
-pub enum Compression {
-    Disabled,
-    Handhsaking,
-    Enabled,
-}
-
-#[derive(Debug, PartialEq, Eq, Clone, Copy, Hash)]
-pub enum Encryption {
-    Disabled,
-    Handshaking,
-    Enabled,
+pub trait Decodable: Sized {
+    fn decode<T: Read>(reader: &mut T) -> CResult<Self>;
 }
 
 #[derive(Debug)]
@@ -81,6 +67,9 @@ impl Client {
 
         receive_packet_plain_no_compression(&mut self.reader).await
     }
+    pub fn set_state(&mut self, state: State) {
+        self.state = state;
+    }
 }
 
 #[derive(Clone, Debug)]
@@ -93,13 +82,12 @@ pub async fn send_packet_plain_no_compression<T: AsyncWrite + Unpin>(
     packet: BuiltPacket,
 ) -> usize {
     use tokio::io::AsyncWriteExt;
-    writer.write_all(&packet.buf).await.unwrap();
+    let mut data = build_var_int(packet.buf.len() as _);
+    data.extend_from_slice(&packet.buf);
+
+    writer.write_all(&data).await.unwrap();
 
     packet.buf.len()
-}
-
-pub trait Encodable {
-    fn encode<T: Write>(&self, writer: &mut T) -> usize;
 }
 
 #[derive(Clone, Debug)]
@@ -123,17 +111,17 @@ impl Drop for ReceivedPacket {
 }
 
 impl ReceivedPacket {
-    pub fn as_handshaking(mut self) -> CResult<Handshaking> {
-        Handshaking::parse(&mut self)
+    pub fn as_handshaking(mut self) -> Result<Handshaking, (anyhow::Error, Self)> {
+        Handshaking::parse(&mut self).map_err(|e| (e, self))
     }
-    pub fn as_status(mut self) -> CResult<Status> {
-        Status::parse(&mut self)
+    pub fn as_status(mut self) -> Result<Status, (anyhow::Error, Self)> {
+        Status::parse(&mut self).map_err(|e| (e, self))
     }
-    pub fn as_login(mut self) -> CResult<Login> {
-        Login::parse(&mut self)
+    pub fn as_login(mut self) -> Result<Login, (anyhow::Error, Self)> {
+        Login::parse(&mut self).map_err(|e| (e, self))
     }
-    pub fn as_play(mut self) -> CResult<Play> {
-        Play::parse(&mut self)
+    pub fn as_play(mut self) -> Result<Play, (anyhow::Error, Self)> {
+        Play::parse(&mut self).map_err(|e| (e, self))
     }
 }
 
@@ -149,8 +137,4 @@ pub async fn receive_packet_plain_no_compression<T: tokio::io::AsyncRead + Unpin
     Ok(ReceivedPacket {
         buf: Cursor::new(buffer.into_boxed_slice()),
     })
-}
-
-pub trait Decodable: Sized {
-    fn decode<T: Read>(reader: &mut T) -> CResult<Self>;
 }

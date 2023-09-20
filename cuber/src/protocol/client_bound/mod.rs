@@ -1,12 +1,14 @@
 use std::io::BufWriter;
 
 use deriver::Encodable;
+use nbt::Blob;
 use packet_id::cb_packet;
 use structstruck;
 use uuid::Uuid;
 
 use super::{
-    primitive::{Array, BoolConditional, Chat, Identifier, VarInt},
+    common::GameMode,
+    primitive::{Array, BoolConditional, Chat, Identifier, Position, Todo, VarInt},
     BuiltPacket, Encodable, State,
 };
 
@@ -19,6 +21,7 @@ pub trait ClientBoundPacket: Encodable {
     }
     fn to_bytes(&self) -> Box<[u8]> {
         let mut buf: BufWriter<Vec<u8>> = BufWriter::new(Vec::new());
+        VarInt(Self::PACKET_ID).encode(&mut buf);
         self.encode(&mut buf);
 
         buf.into_inner().unwrap().into_boxed_slice()
@@ -76,4 +79,32 @@ pub struct PluginRequest {
     message_id: VarInt,
     channel: Identifier,
     data: Array<VarInt, u8>,
+}
+
+structstruck::strike! {
+    #[cb_packet(State::Play, 0x28)]
+    #[derive(Encodable, Debug, PartialEq, Clone)]
+    pub struct LoginPlay {
+        pub(crate) entity_id: i32, // TODO: replace with Entity structure
+        pub(crate) is_hardcore: bool,
+        pub(crate) game_mode: GameMode,
+        pub(crate) previous_game_mode: GameMode,
+        pub(crate) dimension_names: Array<VarInt, Identifier>,
+        pub(crate) registry_codec: Blob,
+        pub(crate) dimension_type: Identifier,
+        pub(crate) dimension_name: Identifier,
+        pub(crate) hashed_seed: u64,
+        pub(crate) max_players: VarInt,
+        pub(crate) view_distance: VarInt,
+        pub(crate) simulation_distance: VarInt,
+        pub(crate) reduce_debug_info: bool,
+        pub(crate) enable_respawn_screen: bool,
+        pub(crate) is_debug: bool,
+        pub(crate) is_flat: bool,
+        pub(crate) death_location: BoolConditional<#[derive(Encodable, Debug, PartialEq, Eq, Clone)] pub struct DeathLocation {
+            pub(crate) dimension_name: Identifier,
+            pub(crate) location: Position,
+        }>,
+        pub(crate) portal_cooldown: VarInt,
+    }
 }

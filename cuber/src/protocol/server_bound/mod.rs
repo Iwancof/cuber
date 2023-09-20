@@ -1,10 +1,10 @@
-use super::primitive::Array;
+use super::primitive::{Array, Identifier};
 use super::CResult;
 use super::{primitive::BoolConditional, primitive::VarInt, Decodable};
 use deriver::Decodable;
 use packet_id::sb_packet;
 use std::io::Read;
-use uuid::Uuid;
+use uuid::{Uuid, Variant};
 
 pub trait ServerBoundPacket: Decodable {
     const PACKET_ID: i32;
@@ -173,5 +173,44 @@ define_server_bound_packets! {
 define_server_bound_packets! {
     #[derive(Debug)]
     pub enum Play {
+        #[sb_packet(0x08)]
+        #[derive(Decodable, Debug, PartialEq, Eq, Clone, Hash)]
+        client_information: pub struct ClientInformation {
+            pub locale: String,
+            pub view_distance: i8,
+            pub chat_mode: VarInt,
+            pub chat_colors: bool,
+            pub displayed_skin_parts: u8,
+            pub main_hand: VarInt,
+            pub enable_text_filtering: bool,
+            pub allow_server_listings: bool,
+        }
+
+        #[sb_packet(0x0d)]
+        #[derive(Decodable, Debug, PartialEq, Eq, Clone, Hash)]
+        plugin_message: pub struct PlguinMessage {
+            channel: Identifier,
+            data: Array<VarInt, u8>,
+        }
+
+        #[sb_packet(0x14)]
+        #[derive(Decodable, Debug, PartialEq, Clone)]
+        set_player_position: pub struct SetPlayerPosition {
+            pub x: f64,
+            pub feet_y: f64,
+            pub z: f64,
+            pub on_ground: bool,
+        }
+
+        #[sb_packet(0x15)]
+        #[derive(Decodable, Debug, PartialEq, Clone)]
+        set_player_position_and_rotation: pub struct SetPlayerPositionAndRotation {
+            pub x: f64,
+            pub feet_y: f64,
+            pub z: f64,
+            pub yaw: f32,
+            pub pitch: f32,
+            pub on_ground: bool,
+        }
     }
 }

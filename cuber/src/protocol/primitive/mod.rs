@@ -47,25 +47,14 @@ macro_rules! write_primitive {
 
 macro_rules! read_primitive {
     ($reader: ident, read_u8) => {
-        $reader.read_u8()?
+        $reader.read_u8()
     };
     ($reader: ident, read_i8) => {
-        $reader.read_i8()?
+        $reader.read_i8()
     };
     ($reader: ident, $method: ident) => {
-        $reader.$method::<NetworkEndian>()?
+        $reader.$method::<NetworkEndian>()
     };
-}
-
-impl Encodable for bool {
-    fn encode<T: Write>(&self, writer: &mut T) -> usize {
-        write_primitive!(writer, write_u8, if *self { 1 } else { 0 })
-    }
-}
-impl Decodable for bool {
-    fn decode<T: Read>(reader: &mut T) -> CResult<Self> {
-        Ok(read_primitive!(reader, read_u8) == 1)
-    }
 }
 
 macro_rules! define_prim {
@@ -77,7 +66,7 @@ macro_rules! define_prim {
         }
         impl Decodable for $type {
             fn decode<T: Read>(reader: &mut T) -> CResult<Self> {
-                Ok(read_primitive!(reader, $read_method))
+                Ok(read_primitive!(reader, $read_method)?)
             }
         }
     };
@@ -95,6 +84,17 @@ define_prim!(i128, write_i128, read_i128);
 define_prim!(u128, write_u128, read_u128);
 define_prim!(f32, write_f32, read_f32);
 define_prim!(f64, write_f64, read_f64);
+
+impl Encodable for bool {
+    fn encode<T: Write>(&self, writer: &mut T) -> usize {
+        (if *self { 1 } else { 0 }).encode(writer)
+    }
+}
+impl Decodable for bool {
+    fn decode<T: Read>(reader: &mut T) -> CResult<Self> {
+        Ok(u8::decode(reader)? == 1)
+    }
+}
 
 #[derive(Debug, PartialEq, Eq, Hash, Clone, Copy)]
 pub struct VarInt(i32);
@@ -271,7 +271,7 @@ where
 {
     fn decode<T: Read>(reader: &mut T) -> CResult<Self> {
         let length: usize = L::decode(reader)?.try_into().map_err(|e| e.into())?;
-        let mut inner = Vec::new();
+        let mut inner = Vec::with_capacity(length);
 
         for _ in 0..length {
             inner.push(Inner::decode(reader)?);

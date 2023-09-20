@@ -24,7 +24,7 @@ macro_rules! define_server_bound_packets {
         $enum_vis: vis enum $enum_ident: ident {
             $(
                 $(#[$struct_meta: meta])*
-                $struct_vis: vis struct $struct_ident: ident {
+                $snake_name: ident : $struct_vis: vis struct $struct_ident: ident {
                     $(
                         $(#[$member_meta: meta])* $member_vis: vis $member: ident : $member_type: ty,
                     )*
@@ -68,6 +68,22 @@ macro_rules! define_server_bound_packets {
                 }
             }
         }
+        impl $enum_ident {
+            paste::paste! {
+                $(
+                    pub fn [<assume_ $snake_name>](self) -> CResult<$struct_ident> {
+                        if let Self::$struct_ident(inner) = self {
+                            Ok(inner)
+                        } else {
+                            CResult::Err(std::io::Error::new(std::io::ErrorKind::Other, format!("expect {} but found {:?}", stringify!($struct_ident), self)).into())
+                        }
+                    }
+                    pub fn [<unwrap_ $snake_name>](self) -> $struct_ident {
+                        self.[<assume_ $snake_name>]().unwrap()
+                    }
+                )*
+            }
+        }
     };
 }
 
@@ -96,7 +112,7 @@ define_server_bound_packets! {
     pub enum Handshaking {
         #[sb_packet(0)]
         #[derive(Decodable, Debug)]
-        pub struct Handshake {
+        handshake: pub struct Handshake {
             pub protocol_version: VarInt,
             pub server_address: String,
             pub server_port: u16,
@@ -105,7 +121,7 @@ define_server_bound_packets! {
 
         #[sb_packet(0xfe)]
         #[derive(Decodable, Debug)]
-        pub struct LegacyServerListPing {
+        legacy_server_list_ping: pub struct LegacyServerListPing {
             payload: u8,
         }
     }
@@ -116,13 +132,13 @@ define_server_bound_packets! {
     pub enum Status {
         #[sb_packet(0)]
         #[derive(Decodable, Debug)]
-        pub struct StatusRequest {
+        status_request: pub struct StatusRequest {
 
         }
 
         #[sb_packet(1)]
         #[derive(Decodable, Debug)]
-        pub struct PingRequest {
+        ping_request: pub struct PingRequest {
             payload: i64,
         }
     }
@@ -133,21 +149,21 @@ define_server_bound_packets! {
     pub enum Login {
         #[sb_packet(0)]
         #[derive(Decodable, Debug, PartialEq, Eq, Clone, Hash)]
-        pub struct LoginStart {
+        login_start: pub struct LoginStart {
             pub name: String,
             pub uuid: BoolConditional<Uuid>,
         }
 
         #[sb_packet(1)]
         #[derive(Decodable, Debug, PartialEq, Eq, Clone, Hash)]
-        pub struct EncryptionResponse {
+        encryption_response: pub struct EncryptionResponse {
             pub shared_secret: Array<VarInt, u8>,
             pub verify_token: Array<VarInt, u8>,
         }
 
         #[sb_packet(2)]
         #[derive(Decodable, Debug, PartialEq, Eq, Clone, Hash)]
-        pub struct PluginResponse {
+        plugin_response: pub struct PluginResponse {
             pub message_id: VarInt,
             pub data: BoolConditional<Array<VarInt, u8>>,
         }

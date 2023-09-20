@@ -2,11 +2,19 @@ pub mod client_bound;
 pub mod primitive;
 pub mod server_bound;
 
-use std::io::{BufWriter, Cursor, Read, Write};
+use std::io::{BufRead, Cursor, Read, Write};
 
-use tokio::io::{AsyncReadExt, AsyncWrite};
+use tokio::{
+    io::{AsyncReadExt, AsyncWrite, BufReader, BufWriter},
+    net::TcpStream,
+};
 
 use crate::protocol::primitive::{leb128::async_read_var_int, VarInt};
+
+use self::{
+    client_bound::ClientBoundPacket,
+    server_bound::{Handshaking, Login, PacketCluster, Status},
+};
 
 pub type CResult<T> = Result<T, anyhow::Error>;
 
@@ -18,14 +26,74 @@ pub enum State {
     Play,
 }
 
-pub struct Client;
+#[derive(Debug, PartialEq, Eq, Clone, Copy, Hash)]
+pub enum Compression {
+    Disabled,
+    Handhsaking,
+    Enabled,
+}
+
+#[derive(Debug, PartialEq, Eq, Clone, Copy, Hash)]
+pub enum Encryption {
+    Disabled,
+    Handshaking,
+    Enabled,
+}
+
+#[derive(Debug)]
+pub struct Client {
+    reader: BufReader<tokio::net::tcp::OwnedReadHalf>,
+    writer: BufWriter<tokio::net::tcp::OwnedWriteHalf>,
+
+    state: State,
+    compression: Compression,
+    encryption: Encryption,
+}
+
+impl Client {
+    pub fn from_stream(stream: tokio::net::TcpStream) -> Self {
+        let (reader, writer) = stream.into_split();
+        let reader = BufReader::new(reader);
+        let writer = BufWriter::new(writer);
+
+        Self {
+            reader,
+            writer,
+            state: State::Handshaking,
+
+            compression: Compression::Disabled,
+            encryption: Encryption::Disabled,
+        }
+    }
+
+    pub async fn send_built_packet(&mut self, packet: BuiltPacket) -> usize {
+        assert_eq!(self.compression, Compression::Disabled); // TODO
+        assert_eq!(self.encryption, Encryption::Disabled); // TODO
+
+        send_packet_plain_no_compression(&mut self.writer, packet).await
+    }
+    pub async fn send_packet<T>(&mut self, packet: T) -> usize
+    where
+        T: ClientBoundPacket,
+    {
+        packet.verify(self.state);
+
+        self.send_built_packet(packet.to_packet()).await
+    }
+
+    pub async fn receive_packet(&mut self) -> CResult<ReceivedPacket> {
+        assert_eq!(self.compression, Compression::Disabled); // TODO
+        assert_eq!(self.encryption, Encryption::Disabled); // TODO
+
+        receive_packet_plain_no_compression(&mut self.reader).await
+    }
+}
 
 #[derive(Clone, Debug)]
 pub struct BuiltPacket {
     buf: Box<[u8]>, // plain data.
 }
 
-// TODO: replace `T` with `Client`
 pub async fn send_packet_plain_no_compression<T: AsyncWrite + Unpin>(
     writer: &mut T,
     packet: BuiltPacket,
@@ -58,6 +126,19 @@ impl Drop for ReceivedPacket {
             panic!("Unprocessed byte sequence remains. {} byte(s)", remain);
         }
     }
+}
+
+impl ReceivedPacket {
+    pub fn as_handshaking(mut self) -> CResult<Handshaking> {
+        Handshaking::parse(&mut self)
+    }
+    pub fn as_status(mut self) -> CResult<Status> {
+        Status::parse(&mut self)
+    }
+    pub fn as_login(mut self) -> CResult<Login> {
+        Login::parse(&mut self)
+    }
+    // TODO as_play
 }
 
 // TODO: change by connection configure.

@@ -7,8 +7,8 @@ use structstruck;
 use uuid::Uuid;
 
 use super::{
-    common::GameMode,
-    primitive::{Array, BoolConditional, Chat, Identifier, Position, Todo, VarInt},
+    common::{Feature, GameMode},
+    primitive::{array::Array, BoolConditional, Chat, Identifier, Position, Todo, VarInt},
     BuiltPacket, Encodable, State,
 };
 
@@ -107,4 +107,10 @@ structstruck::strike! {
         }>,
         pub(crate) portal_cooldown: VarInt,
     }
+}
+
+#[cb_packet(State::Play, 0x6b)]
+#[derive(Encodable, Debug, PartialEq, Eq, Clone)]
+pub struct FeatureFlags {
+    pub features: Array<VarInt, Feature>,
 }

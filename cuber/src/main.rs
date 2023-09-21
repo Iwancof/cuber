@@ -2,8 +2,7 @@ pub mod protocol;
 
 use std::net::Ipv4Addr;
 
-use nbt::Blob;
-use protocol::client_bound::{LoginPlay, LoginSuccess};
+use protocol::client_bound::{FeatureFlags, LoginPlay, LoginSuccess};
 use protocol::server_bound::HandshakeNextState;
 use protocol::{CResult, Client};
 use tokio::net::TcpListener;
@@ -73,6 +72,11 @@ async fn main() -> CResult<()> {
             portal_cooldown: 10.into(),
         };
         client.send_packet(login_play).await;
+
+        let features = FeatureFlags {
+            features: vec![protocol::common::Feature::Vanilla].into(),
+        };
+        client.send_packet(features).await;
 
         while true {
             let packet = client.receive_packet().await?.as_play();

@@ -1,4 +1,6 @@
-use super::{Decodable, Encodable};
+use std::str::EncodeUtf16;
+
+use super::{primitive::Identifier, Decodable, Encodable};
 
 #[derive(PartialEq, Eq, Clone, Copy, Debug, Hash)]
 pub enum State {
@@ -59,5 +61,24 @@ impl Encodable for GameMode {
             GameMode::Spectator => 3,
         };
         raw.encode(writer)
+    }
+}
+
+#[derive(Debug, PartialEq, Eq, Clone, Hash)]
+pub enum Feature {
+    Vanilla,
+    Bundle,
+    Other(Identifier),
+}
+
+impl Encodable for Feature {
+    fn encode<T: std::io::Write>(&self, writer: &mut T) -> usize {
+        let ident = match self {
+            Self::Vanilla => "minecraft:vanilla".into(),
+            Self::Bundle => "minecraft:bundle".into(),
+            Self::Other(ident) => ident.clone(),
+        };
+
+        ident.encode(writer)
     }
 }

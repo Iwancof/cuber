@@ -1,6 +1,8 @@
+pub mod array;
 pub mod leb128;
 
-use self::leb128::read_var_int;
+use array::{Array, ArrayLength};
+use leb128::read_var_int;
 
 use super::CResult;
 use super::{Decodable, Encodable};
@@ -10,8 +12,6 @@ use deriver::{Decodable, Encodable};
 use byteorder::{NetworkEndian, ReadBytesExt, WriteBytesExt};
 use nbt::Blob;
 use std::io::{ErrorKind, Read, Write};
-use std::marker::PhantomData;
-use std::slice::{Iter, IterMut};
 use uuid::Uuid;
 
 macro_rules! write_primitive {
@@ -93,7 +93,14 @@ impl Encodable for bool {
 }
 impl Decodable for bool {
     fn decode<T: Read>(reader: &mut T) -> CResult<Self> {
-        Ok(u8::decode(reader)? == 1)
+        match u8::decode(reader) {
+            Ok(0) => Ok(false),
+            Ok(1) => Ok(true),
+            Ok(_) => {
+                Err(std::io::Error::new(ErrorKind::InvalidData, "invalid boolean value").into())
+            }
+            Err(e) => Err(e),
+        }
     }
 }
 
@@ -123,29 +130,6 @@ impl From<VarInt> for i32 {
         value.0
     }
 }
-impl TryInto<usize> for VarInt {
-    type Error = anyhow::Error;
-    fn try_into(self) -> Result<usize, Self::Error> {
-        if self.0 < 0 {
-            return Err(std::io::Error::new(
-                ErrorKind::InvalidData,
-                format!("could not convert to usize: {}", self.0),
-            )
-            .into());
-        }
-        Ok(self.0 as usize)
-    }
-}
-impl From<usize> for VarInt {
-    fn from(value: usize) -> Self {
-        Self(value as _)
-    }
-}
-impl VarInt {
-    fn inner(self) -> i32 {
-        self.0
-    }
-}
 
 impl Encodable for String {
     fn encode<T: Write>(&self, writer: &mut T) -> usize {
@@ -162,10 +146,7 @@ impl Encodable for String {
 }
 impl Decodable for String {
     fn decode<T: Read>(reader: &mut T) -> CResult<Self> {
-        let length = VarInt::decode(reader)?.inner() as usize;
-        let mut buf = vec![0; length];
-        reader.read_exact(&mut buf)?;
-
+        let buf = Array::<VarInt, u8>::decode(reader)?.inner;
         Ok(String::from_utf8(buf)?)
     }
 }
@@ -251,8 +232,8 @@ impl Position {
     pub fn pack(&self) -> i64 {
         let mut packed = 0_i64;
         packed |= (self.x as i64 & 0x3ffffff) << 38;
-        packed |= (self.y as i64 & 0xfff) << 26;
-        packed |= self.z as i64 & 0x3ffffff;
+        packed |= (self.z as i64 & 0x3ffffff) << 12;
+        packed |= self.y as i64 & 0xfff;
         packed
     }
     pub fn unpack(packed: i64) -> CResult<Self> {
@@ -332,109 +313,6 @@ impl<Inner> From<BoolConditional<Inner>> for Option<Inner> {
     }
 }
 
-impl<const L: usize, Inner> Encodable for [Inner; L]
-where
-    Inner: Encodable,
-{
-    fn encode<T: Write>(&self, writer: &mut T) -> usize {
-        self.iter().map(|inner| inner.encode(writer)).sum()
-    }
-}
-
-impl<const L: usize, Inner> Decodable for [Inner; L]
-where
-    Inner: Decodable,
-{
-    fn decode<T: Read>(reader: &mut T) -> CResult<Self> {
-        Ok(array_macro::array![_ => Inner::decode(reader)?; L])
-    }
-}
-
-#[derive(PartialEq, Eq, Clone, Hash)]
-pub struct Array<L, T> {
-    pub inner: Vec<T>,
-    pub _phantom: PhantomData<fn(L) -> ()>,
-}
-impl<L, Inner> Encodable for Array<L, Inner>
-where
-    Inner: Encodable,
-    L: Encodable + From<usize>,
-{
-    fn encode<T: Write>(&self, writer: &mut T) -> usize {
-        let mut written = 0;
-
-        let l = L::from(self.inner.len());
-        written += l.encode(writer);
-        written += self.iter().map(|inner| inner.encode(writer)).sum::<usize>();
-
-        written
-    }
-}
-impl<L, Inner> Decodable for Array<L, Inner>
-where
-    Inner: Decodable,
-    L: Decodable + TryInto<usize>,
-    <L as TryInto<usize>>::Error: Into<anyhow::Error>,
-{
-    fn decode<T: Read>(reader: &mut T) -> CResult<Self> {
-        let length: usize = L::decode(reader)?.try_into().map_err(|e| e.into())?;
-        let mut inner = Vec::with_capacity(length);
-
-        for _ in 0..length {
-            inner.push(Inner::decode(reader)?);
-        }
-
-        Ok(Self {
-            inner,
-            _phantom: PhantomData,
-        })
-    }
-}
-
-impl<L, Inner> std::fmt::Debug for Array<L, Inner>
-where
-    Inner: std::fmt::Debug,
-{
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        use std::any::type_name;
-        f.debug_struct(&format!(
-            "Array<{}, {}>",
-            type_name::<L>(),
-            type_name::<Inner>()
-        ))
-        .field("inner", &&self.inner)
-        .finish()
-    }
-}
-impl<L, Inner> From<Vec<Inner>> for Array<L, Inner> {
-    fn from(value: Vec<Inner>) -> Self {
-        Self {
-            inner: value,
-            _phantom: PhantomData,
-        }
-    }
-}
-impl<L, Inner> Array<L, Inner> {
-    #[allow(unused)]
-    pub fn iter(&self) -> Iter<Inner> {
-        self.inner.iter()
-    }
-    #[allow(unused)]
-    pub fn iter_mut(&mut self) -> IterMut<Inner> {
-        self.inner.iter_mut()
-    }
-    #[allow(unused)]
-    pub fn from_fixed<const LENGTH: usize>(fixed: [Inner; LENGTH]) -> Self
-    where
-        Inner: Clone,
-    {
-        Self {
-            inner: fixed.to_vec(),
-            _phantom: PhantomData,
-        }
-    }
-}
-
 #[derive(Debug, PartialEq, Eq, Clone, Copy, Hash)]
 pub struct Todo;
 impl Encodable for Todo {
@@ -489,6 +367,40 @@ mod tests {
     }
 
     #[test]
+    fn bool_encode() {
+        let mut buf = Vec::new();
+        true.encode(&mut buf);
+        false.encode(&mut buf);
+
+        assert_eq!(buf, vec![1, 0]);
+    }
+
+    #[test]
+    fn bool_decode() {
+        let mut buf = Cursor::new(vec![1, 0, 10]);
+        assert_eq!(bool::decode(&mut buf).unwrap(), true);
+        assert_eq!(bool::decode(&mut buf).unwrap(), false);
+        bool::decode(&mut buf).unwrap_err();
+    }
+
+    #[test]
+    fn string_encode() {
+        let mut buf = Vec::new();
+        String::from("hello").encode(&mut buf);
+
+        assert_eq!(buf, vec![5, 104, 101, 108, 108, 111]);
+    }
+
+    #[test]
+    fn string_decode() {
+        let mut buf = Cursor::new(vec![5, 104, 101, 108, 108, 111]);
+        assert_eq!(
+            String::decode(&mut buf).unwrap(),
+            String::from("hello").to_string()
+        );
+    }
+
+    #[test]
     fn position_unpack() {
         let raw = 0b01000110000001110110001100_10110000010101101101001000_001100111111;
         let Position { x, y, z } = Position::unpack(raw).unwrap();
@@ -498,6 +410,7 @@ mod tests {
         assert_eq!(z, -20882616);
     }
 
+    #[test]
     fn position_pack() {
         let pos = Position::new(18357644, 831, -20882616).unwrap();
         assert_eq!(

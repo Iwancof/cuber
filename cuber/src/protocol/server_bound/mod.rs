@@ -1,10 +1,10 @@
-use super::primitive::{Array, Identifier};
+use super::primitive::{array::Array, Identifier};
 use super::CResult;
 use super::{primitive::BoolConditional, primitive::VarInt, Decodable};
 use deriver::Decodable;
 use packet_id::sb_packet;
 use std::io::Read;
-use uuid::{Uuid, Variant};
+use uuid::Uuid;
 
 pub trait ServerBoundPacket: Decodable {
     const PACKET_ID: i32;

@@ -1,4 +1,7 @@
-use super::primitive::{array::Array, Identifier};
+use super::primitive::{
+    array::{Array, PacketInferredInBytes},
+    Identifier,
+};
 use super::CResult;
 use super::{primitive::BoolConditional, primitive::VarInt, Decodable};
 use deriver::Decodable;
@@ -165,7 +168,7 @@ define_server_bound_packets! {
         #[derive(Decodable, Debug, PartialEq, Eq, Clone, Hash)]
         plugin_response: pub struct PluginResponse {
             pub message_id: VarInt,
-            pub data: BoolConditional<Array<VarInt, u8>>,
+            pub data: BoolConditional<Array<PacketInferredInBytes, u8>>,
         }
     }
 }

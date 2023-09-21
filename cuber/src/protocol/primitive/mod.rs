@@ -401,6 +401,28 @@ mod tests {
     }
 
     #[test]
+    fn bool_condition_encode() {
+        let mut buf = Vec::new();
+        BoolConditional::<u8>(Some(5_u8)).encode(&mut buf);
+        BoolConditional::<u8>(None).encode(&mut buf);
+
+        assert_eq!(buf, vec![1, 5, 0]);
+    }
+
+    #[test]
+    fn bool_condition_decode() {
+        let mut buf = Cursor::new(vec![1, 5, 0]);
+        assert_eq!(
+            BoolConditional::<u8>::decode(&mut buf).unwrap(),
+            BoolConditional(Some(5_u8))
+        );
+        assert_eq!(
+            BoolConditional::<u8>::decode(&mut buf).unwrap(),
+            BoolConditional(None)
+        );
+    }
+
+    #[test]
     fn position_unpack() {
         let raw = 0b01000110000001110110001100_10110000010101101101001000_001100111111;
         let Position { x, y, z } = Position::unpack(raw).unwrap();

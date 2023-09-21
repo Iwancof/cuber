@@ -4,8 +4,6 @@ use std::{
     slice::{Iter, IterMut},
 };
 
-use deriver::{Decodable, Encodable};
-
 use crate::protocol::{Decodable, Encodable};
 
 use super::{CResult, VarInt};
@@ -30,8 +28,8 @@ impl ArrayLength for VarInt {
     }
 }
 
-#[derive(Debug, PartialEq, Eq, Clone, Hash)]
-struct FixedLength<const L: usize> {
+#[derive(Debug, PartialEq, Eq, Clone, Copy, Hash)]
+pub struct FixedLength<const L: usize> {
     remain: usize,
 }
 
@@ -62,7 +60,9 @@ impl<const L: usize> ArrayLength for FixedLength<L> {
         self.remain > 0
     }
 }
-struct PacketInferredInBytes;
+
+#[derive(Debug, PartialEq, Eq, Clone, Copy, Hash)]
+pub struct PacketInferredInBytes;
 impl Encodable for PacketInferredInBytes {
     fn encode<T: Write>(&self, _writer: &mut T) -> usize {
         0

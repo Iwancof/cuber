@@ -160,6 +160,19 @@ impl<L, Inner> From<Vec<Inner>> for Array<L, Inner> {
         }
     }
 }
+
+impl<L, Inner> From<&[Inner]> for Array<L, Inner>
+where
+    Inner: Clone,
+{
+    fn from(value: &[Inner]) -> Self {
+        Self {
+            inner: value.to_vec(),
+            _phantom: PhantomData,
+        }
+    }
+}
+
 impl<L, Inner> Array<L, Inner> {
     #[allow(unused)]
     pub fn iter(&self) -> Iter<Inner> {

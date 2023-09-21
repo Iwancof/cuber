@@ -2,7 +2,12 @@ pub mod protocol;
 
 use std::net::Ipv4Addr;
 
-use protocol::client_bound::{FeatureFlags, LoginPlay, LoginSuccess};
+use protocol::client_bound::{
+    ChangeDifficulty, FeatureFlags, LoginPlay, LoginSuccess, PlayerAbilities, PluginMessage,
+    SetHeldItem, SpawnEntity,
+};
+use protocol::common::PlayerAbilitiesFlags;
+use protocol::primitive::Angle;
 use protocol::server_bound::HandshakeNextState;
 use protocol::{CResult, Client};
 use tokio::net::TcpListener;
@@ -34,10 +39,12 @@ async fn main() -> CResult<()> {
             .unwrap()
             .assume_login_start()?;
 
+        let player_uuid = ls.uuid.0.unwrap_or_default();
+
         println!("New player!  name: {}, uuid: {:?}", ls.name, ls.uuid.0);
 
         let sc = LoginSuccess {
-            uuid: ls.uuid.0.unwrap_or_default(),
+            uuid: player_uuid.clone(),
             user_name: ls.name,
             property: vec![].into(),
         };
@@ -77,6 +84,44 @@ async fn main() -> CResult<()> {
             features: vec![protocol::common::Feature::Vanilla].into(),
         };
         client.send_packet(features).await;
+
+        let pm = PluginMessage {
+            channel: "minecraft:brand".into(),
+            data: "vanilla".as_bytes().into(),
+        };
+        client.send_packet(pm).await;
+
+        let cd = ChangeDifficulty {
+            new_difficulty: protocol::common::Difficulty::Peaceful,
+        };
+        client.send_packet(cd).await;
+
+        let pa = PlayerAbilities {
+            flags: PlayerAbilitiesFlags::CREATIVE_MODE,
+            flying_speed: 0.1,
+            field_of_view_modifier: 0.1,
+        };
+        client.send_packet(pa).await;
+
+        let hi = SetHeldItem { slot: 0 };
+        client.send_packet(hi).await;
+
+        let se = SpawnEntity {
+            entity_id: 0.into(),
+            entity_uuid: player_uuid.clone(),
+            mob_type: 0.into(),
+            x: 0.,
+            y: 0.,
+            z: 0.,
+            pitch: Angle { value: 0 },
+            yaw: Angle { value: 0 },
+            head_yaw: Angle { value: 0 },
+            data: 0.into(),
+            velocity_x: 0,
+            velocity_y: 0,
+            velocity_z: 0,
+        };
+        client.send_packet(se).await;
 
         while true {
             let packet = client.receive_packet().await?.as_play();

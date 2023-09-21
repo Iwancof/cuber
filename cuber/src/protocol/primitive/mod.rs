@@ -104,6 +104,11 @@ impl Decodable for bool {
     }
 }
 
+#[derive(Encodable, Decodable, Debug, PartialEq, Eq, Hash, Clone, Copy)]
+pub struct Angle {
+    pub value: u8,
+}
+
 #[derive(Debug, PartialEq, Eq, Hash, Clone, Copy)]
 pub struct VarInt(pub i32);
 

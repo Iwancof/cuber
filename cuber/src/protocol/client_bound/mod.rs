@@ -7,10 +7,10 @@ use structstruck;
 use uuid::Uuid;
 
 use super::{
-    common::{Feature, GameMode},
+    common::{Difficulty, Feature, GameMode, PlayerAbilitiesFlags},
     primitive::{
         array::{Array, PacketInferredInBytes},
-        BoolConditional, Chat, Identifier, Position, Todo, VarInt,
+        Angle, BoolConditional, Chat, Identifier, Position, VarInt,
     },
     BuiltPacket, Encodable, State,
 };
@@ -39,21 +39,21 @@ pub trait ClientBoundPacket: Encodable {
 #[cb_packet(State::Status, 0)]
 #[derive(Encodable, Debug, PartialEq, Eq, Clone)]
 pub struct StatusResponse {
-    json_response: String, // replace with Json object.
+    pub json_response: String, // replace with Json object.
 }
 
 #[cb_packet(State::Login, 0)]
 #[derive(Encodable, Debug, PartialEq, Eq, Clone)]
 pub struct Disconnect {
-    chat: Chat,
+    pub chat: Chat,
 }
 
 #[cb_packet(State::Login, 1)]
 #[derive(Encodable, Debug, PartialEq, Eq, Clone)]
 pub struct EncryptionRequest {
-    server_id: String,
-    public_key: Array<VarInt, u8>,
-    verify_token: Array<VarInt, u8>,
+    pub server_id: String,
+    pub public_key: Array<VarInt, u8>,
+    pub verify_token: Array<VarInt, u8>,
 }
 
 structstruck::strike! {
@@ -73,15 +73,46 @@ structstruck::strike! {
 #[cb_packet(State::Login, 0x03)]
 #[derive(Encodable, Debug, PartialEq, Eq, Clone)]
 pub struct SetCompression {
-    threshold: VarInt,
+    pub threshold: VarInt,
 }
 
 #[cb_packet(State::Login, 0x04)]
 #[derive(Encodable, Debug, PartialEq, Eq, Clone)]
 pub struct PluginRequest {
-    message_id: VarInt,
-    channel: Identifier,
-    data: Array<PacketInferredInBytes, u8>,
+    pub message_id: VarInt,
+    pub channel: Identifier,
+    pub data: Array<PacketInferredInBytes, u8>,
+}
+
+#[cb_packet(State::Play, 0x01)]
+#[derive(Encodable, Debug, PartialEq, Clone, Copy)]
+pub struct SpawnEntity {
+    pub entity_id: VarInt,
+    pub entity_uuid: Uuid,
+    pub mob_type: VarInt,
+    pub x: f64,
+    pub y: f64,
+    pub z: f64,
+    pub pitch: Angle,
+    pub yaw: Angle,
+    pub head_yaw: Angle,
+    pub data: VarInt,
+    pub velocity_x: i16,
+    pub velocity_y: i16,
+    pub velocity_z: i16,
+}
+
+#[cb_packet(State::Play, 0x02)]
+#[derive(Encodable, Debug, PartialEq, Eq, Clone)]
+pub struct ChangeDifficulty {
+    pub new_difficulty: Difficulty,
+}
+
+#[cb_packet(State::Play, 0x17)]
+#[derive(Encodable, Debug, PartialEq, Eq, Clone)]
+pub struct PluginMessage {
+    pub channel: Identifier,
+    pub data: Array<PacketInferredInBytes, u8>,
 }
 
 structstruck::strike! {
@@ -110,6 +141,20 @@ structstruck::strike! {
         }>,
         pub(crate) portal_cooldown: VarInt,
     }
+}
+
+#[cb_packet(State::Play, 0x34)]
+#[derive(Encodable, Debug, PartialEq, Clone)]
+pub struct PlayerAbilities {
+    pub flags: PlayerAbilitiesFlags,
+    pub flying_speed: f32,
+    pub field_of_view_modifier: f32,
+}
+
+#[cb_packet(State::Play, 0x4d)]
+#[derive(Encodable, Debug, PartialEq, Clone)]
+pub struct SetHeldItem {
+    pub slot: u8,
 }
 
 #[cb_packet(State::Play, 0x6b)]

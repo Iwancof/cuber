@@ -125,7 +125,7 @@ define_server_bound_packets! {
         #[sb_packet(0xfe)]
         #[derive(Decodable, Debug)]
         legacy_server_list_ping: pub struct LegacyServerListPing {
-            payload: u8,
+            pub payload: u8,
         }
     }
 }
@@ -135,14 +135,12 @@ define_server_bound_packets! {
     pub enum Status {
         #[sb_packet(0)]
         #[derive(Decodable, Debug)]
-        status_request: pub struct StatusRequest {
-
-        }
+        status_request: pub struct StatusRequest { }
 
         #[sb_packet(1)]
         #[derive(Decodable, Debug)]
         ping_request: pub struct PingRequest {
-            payload: i64,
+            pub payload: i64,
         }
     }
 }

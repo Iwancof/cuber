@@ -1,5 +1,3 @@
-use deriver::{Decodable, Encodable};
-
 use super::{primitive::Identifier, Decodable, Encodable};
 
 #[derive(PartialEq, Eq, Clone, Copy, Debug, Hash)]
@@ -135,6 +133,37 @@ impl Encodable for PlayerAbilitiesFlags {
 }
 
 impl Decodable for PlayerAbilitiesFlags {
+    fn decode<T: std::io::Read>(reader: &mut T) -> super::CResult<Self> {
+        let raw = u8::decode(reader)?;
+        match Self::from_bits(raw) {
+            Some(flags) => Ok(flags),
+            None => Err(std::io::Error::new(
+                std::io::ErrorKind::InvalidData,
+                format!("Invalid player abilities flags: {}", raw),
+            )
+            .into()),
+        }
+    }
+}
+
+bitflags::bitflags! {
+    #[derive(Debug, PartialEq, Eq, Clone, Copy, Hash)]
+    pub struct SynchronizePlayerPositionFlags: u8 {
+        const X     = 0b0000_0001;
+        const Y     = 0b0000_0010;
+        const Z     = 0b0000_0100;
+        const Y_ROT = 0b0000_1000;
+        const X_ROP = 0b0001_0000;
+    }
+}
+
+impl Encodable for SynchronizePlayerPositionFlags {
+    fn encode<T: std::io::Write>(&self, writer: &mut T) -> usize {
+        self.bits().encode(writer)
+    }
+}
+
+impl Decodable for SynchronizePlayerPositionFlags {
     fn decode<T: std::io::Read>(reader: &mut T) -> super::CResult<Self> {
         let raw = u8::decode(reader)?;
         match Self::from_bits(raw) {

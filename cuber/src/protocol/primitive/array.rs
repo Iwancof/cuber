@@ -4,27 +4,36 @@ use std::{
     slice::{Iter, IterMut},
 };
 
+use deriver::{Decodable, Encodable};
+
 use crate::protocol::{Decodable, Encodable};
 
 use super::{CResult, VarInt};
 pub trait ArrayLength: Sized {
-    fn from_len(len: usize) -> Self;
-    fn got_element(&mut self);
+    fn from(write_object: usize, write_bytes: usize) -> Self;
+    fn got_element(&mut self, read_object: usize, read_bytes: usize);
     fn has_next(&self) -> bool;
     fn is_end(&self) -> bool {
         !self.has_next()
     }
 }
 
-impl ArrayLength for VarInt {
-    fn from_len(len: usize) -> Self {
-        VarInt(len as _)
+#[derive(Encodable, Decodable, PartialEq, Eq, Clone, Copy, Hash)]
+pub struct VarIntLength {
+    len: VarInt,
+}
+
+impl ArrayLength for VarIntLength {
+    fn from(write_object: usize, _write_bytes: usize) -> Self {
+        VarIntLength {
+            len: VarInt(write_object as _),
+        }
     }
-    fn got_element(&mut self) {
-        self.0 -= 1;
+    fn got_element(&mut self, read_object: usize, _read_bytes: usize) {
+        self.len.0 -= read_object as i32;
     }
     fn has_next(&self) -> bool {
-        self.0 > 0
+        self.len.0 > 0
     }
 }
 
@@ -44,20 +53,39 @@ impl<const L: usize> Decodable for FixedLength<L> {
     }
 }
 impl<const L: usize> ArrayLength for FixedLength<L> {
-    fn from_len(len: usize) -> Self {
-        if len != L {
+    fn from(write_object: usize, write_bytes: usize) -> Self {
+        if write_object != L {
             panic!(
                 "Fixed array length mismatch: expected {}, but got {}",
-                L, len
+                L, write_object
             );
         }
         Self { remain: L }
     }
-    fn got_element(&mut self) {
-        self.remain -= 1;
+    fn got_element(&mut self, read_object: usize, _read_bytes: usize) {
+        self.remain -= read_object;
     }
     fn has_next(&self) -> bool {
         self.remain > 0
+    }
+}
+
+#[derive(Encodable, Decodable, PartialEq, Eq, Clone, Copy, Hash)]
+pub struct VarIntLengthInBytes {
+    len: VarInt,
+}
+
+impl ArrayLength for VarIntLengthInBytes {
+    fn from(_write_object: usize, write_bytes: usize) -> Self {
+        VarIntLengthInBytes {
+            len: VarInt(write_bytes as _),
+        }
+    }
+    fn got_element(&mut self, _read_object: usize, read_bytes: usize) {
+        self.len.0 -= read_bytes as i32;
+    }
+    fn has_next(&self) -> bool {
+        self.len.0 > 0
     }
 }
 
@@ -75,10 +103,10 @@ impl Decodable for PacketInferredInBytes {
 }
 
 impl ArrayLength for PacketInferredInBytes {
-    fn from_len(len: usize) -> Self {
+    fn from(_write_object: usize, _write_bytes: usize) -> Self {
         Self
     }
-    fn got_element(&mut self) {
+    fn got_element(&mut self, _read_object: usize, _read_bytes: usize) {
         // ah, ok.
     }
     // PacketInferred では、要素数がパケット依存なので has_next = true にしつつ is_ned = true にする
@@ -102,10 +130,19 @@ where
 {
     fn encode<T: Write>(&self, writer: &mut T) -> usize {
         let mut written = 0;
+        let mut tmp_buf = Vec::with_capacity(core::mem::size_of::<Inner>() * self.inner.len()); // for performance
 
-        let l = L::from_len(self.inner.len());
+        let object_num = self.inner.len();
+        let wrote_num = self
+            .iter()
+            .map(|inner| inner.encode(&mut tmp_buf))
+            .sum::<usize>();
+
+        let l = L::from(object_num, wrote_num);
         written += l.encode(writer);
-        written += self.iter().map(|inner| inner.encode(writer)).sum::<usize>();
+        written += tmp_buf.len();
+
+        writer.write_all(&tmp_buf).unwrap();
 
         written
     }
@@ -115,13 +152,32 @@ where
     Inner: Decodable,
     L: Decodable + ArrayLength,
 {
-    fn decode<T: Read>(reader: &mut T) -> CResult<Self> {
+    fn decode<Outer: Read>(reader: &mut Outer) -> CResult<Self> {
+        struct ReadCountWrapper<Inner> {
+            inner: Inner,
+            count: usize,
+        }
+        impl<Inner> Read for ReadCountWrapper<Inner>
+        where
+            Inner: Read,
+        {
+            fn read(&mut self, buf: &mut [u8]) -> std::io::Result<usize> {
+                let read = self.inner.read(buf)?;
+                self.count += read;
+                Ok(read)
+            }
+        }
+        let reader = &mut ReadCountWrapper {
+            inner: reader,
+            count: 0,
+        };
+
         let mut remain_checker: L = L::decode(reader)?;
         let mut inner = Vec::new();
 
         while let Ok(element) = Inner::decode(reader) {
             inner.push(element);
-            remain_checker.got_element();
+            remain_checker.got_element(1, reader.count);
 
             if !remain_checker.has_next() {
                 break;
@@ -203,7 +259,7 @@ mod tests {
     #[test]
     fn array_varint_encode() {
         let mut buf = Vec::new();
-        Array::<VarInt, u8>::from(vec![1, 2, 3, 4, 5]).encode(&mut buf);
+        Array::<VarIntLength, u8>::from(vec![1, 2, 3, 4, 5]).encode(&mut buf);
 
         assert_eq!(buf, vec![5, 1, 2, 3, 4, 5]);
     }
@@ -211,7 +267,7 @@ mod tests {
     #[test]
     fn array_varint_decode() {
         let mut buf = Cursor::new(vec![5, 1, 2, 3, 4, 5]);
-        let decoded = Array::<VarInt, u8>::decode(&mut buf).unwrap();
+        let decoded = Array::<VarIntLength, u8>::decode(&mut buf).unwrap();
 
         assert_eq!(decoded.inner, vec![1, 2, 3, 4, 5]);
     }
@@ -220,7 +276,55 @@ mod tests {
     #[should_panic]
     fn array_varint_decode_panic() {
         let mut buf = Cursor::new(vec![5, 1, 2, 3, 4]);
-        let _decoded = Array::<VarInt, u8>::decode(&mut buf).unwrap();
+        let _decoded = Array::<VarIntLength, u8>::decode(&mut buf).unwrap();
+    }
+
+    #[test]
+    fn array_varint_inbytes_encode() {
+        #[derive(Encodable, Decodable, Debug, PartialEq, Eq, Clone, Copy, Hash)]
+        pub struct TestStruct {
+            pub a: u8,
+            pub b: u8,
+        }
+
+        let mut buf = Vec::new();
+        Array::<VarIntLengthInBytes, TestStruct>::from(vec![
+            TestStruct { a: 1, b: 2 },
+            TestStruct { a: 3, b: 4 },
+        ])
+        .encode(&mut buf);
+
+        assert_eq!(buf, vec![4, 1, 2, 3, 4]);
+    }
+
+    #[test]
+    fn array_varint_inbytes_decode() {
+        #[derive(Encodable, Decodable, Debug, PartialEq, Eq, Clone, Copy, Hash)]
+        pub struct TestStruct {
+            pub a: u8,
+            pub b: u8,
+        }
+
+        let mut buf = Cursor::new(vec![4, 1, 2, 3, 4]);
+        let decoded = Array::<VarIntLengthInBytes, TestStruct>::decode(&mut buf).unwrap();
+
+        assert_eq!(
+            decoded.inner,
+            vec![TestStruct { a: 1, b: 2 }, TestStruct { a: 3, b: 4 }]
+        );
+    }
+
+    #[test]
+    #[should_panic]
+    fn array_varint_inbytes_decode_panic() {
+        #[derive(Encodable, Decodable, Debug, PartialEq, Eq, Clone, Copy, Hash)]
+        pub struct TestStruct {
+            pub a: u8,
+            pub b: u8,
+        }
+
+        let mut buf = Cursor::new(vec![4, 1, 2, 3]);
+        let _decoded = Array::<VarIntLengthInBytes, TestStruct>::decode(&mut buf).unwrap();
     }
 
     #[test]

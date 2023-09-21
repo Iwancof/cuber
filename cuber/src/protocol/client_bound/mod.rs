@@ -7,10 +7,10 @@ use structstruck;
 use uuid::Uuid;
 
 use super::{
-    common::{Difficulty, Feature, GameMode, PlayerAbilitiesFlags},
+    common::{Difficulty, Feature, GameMode, PlayerAbilitiesFlags, SynchronizePlayerPositionFlags},
     primitive::{
-        array::{Array, PacketInferredInBytes},
-        Angle, BoolConditional, Chat, Identifier, Position, VarInt,
+        array::{Array, PacketInferredInBytes, VarIntLength, VarIntLengthInBytes},
+        Angle, BoolConditional, Chat, Identifier, Position, Todo, VarInt,
     },
     BuiltPacket, Encodable, State,
 };
@@ -52,8 +52,8 @@ pub struct Disconnect {
 #[derive(Encodable, Debug, PartialEq, Eq, Clone)]
 pub struct EncryptionRequest {
     pub server_id: String,
-    pub public_key: Array<VarInt, u8>,
-    pub verify_token: Array<VarInt, u8>,
+    pub public_key: Array<VarIntLength, u8>,
+    pub verify_token: Array<VarIntLength, u8>,
 }
 
 structstruck::strike! {
@@ -62,7 +62,7 @@ structstruck::strike! {
     pub struct LoginSuccess {
         pub uuid: Uuid,
         pub user_name: String,
-        pub property: Array<VarInt, #[derive(Encodable, Debug, PartialEq, Eq, Clone)] pub struct LoginSuccessProperty {
+        pub property: Array<VarIntLength, #[derive(Encodable, Debug, PartialEq, Eq, Clone)] pub struct LoginSuccessProperty {
             pub name: String,
             pub value: String,
             pub signature: BoolConditional<String>,
@@ -102,10 +102,11 @@ pub struct SpawnEntity {
     pub velocity_z: i16,
 }
 
-#[cb_packet(State::Play, 0x02)]
+#[cb_packet(State::Play, 0x0C)]
 #[derive(Encodable, Debug, PartialEq, Eq, Clone)]
 pub struct ChangeDifficulty {
     pub new_difficulty: Difficulty,
+    pub difficulty_locked: bool,
 }
 
 #[cb_packet(State::Play, 0x17)]
@@ -116,6 +117,37 @@ pub struct PluginMessage {
 }
 
 structstruck::strike! {
+    #[cb_packet(State::Play, 0x24)]
+    #[derive(Encodable, Debug, PartialEq, Clone)]
+    pub struct ChunkDataAndUpdateLight {
+        chunk_x: i32,
+        chunk_z: i32,
+        height_maps: nbt::Blob,
+        chunk_data: Array<VarIntLengthInBytes, #[derive(Encodable, Debug, PartialEq, Clone)] pub struct ChunkSection {
+            block_count: i16,
+            block_states: #[derive(Encodable, Debug, PartialEq, Clone)] pub struct PalettedContainer {
+                bits_per_entry: u8,
+                palette: Todo,
+                data_array: Array<VarIntLength, i64>,
+            },
+            biomes: PalettedContainer,
+        }>,
+        block_entities: Array<VarIntLength, #[derive(Encodable, Debug, PartialEq, Clone)] pub struct BlockEntity {
+            xy: Todo,
+            y: u16,
+            be_type: VarInt,
+            data: nbt::Blob,
+        }>,
+        sky_light_mask: Todo,
+        block_light_mask: Todo,
+        empty_sky_light_mask: Todo,
+        empty_block_light_mask: Todo,
+        sky_lights_array: Array<VarIntLength, Array<VarIntLength, Todo>>,
+        block_lights_array: Array<VarIntLength, Array<VarIntLength, Todo>>,
+    }
+}
+
+structstruck::strike! {
     #[cb_packet(State::Play, 0x28)]
     #[derive(Encodable, Debug, PartialEq, Clone)]
     pub struct LoginPlay {
@@ -123,7 +155,7 @@ structstruck::strike! {
         pub(crate) is_hardcore: bool,
         pub(crate) game_mode: GameMode,
         pub(crate) previous_game_mode: GameMode,
-        pub(crate) dimension_names: Array<VarInt, Identifier>,
+        pub(crate) dimension_names: Array<VarIntLength, Identifier>,
         pub(crate) registry_codec: Blob,
         pub(crate) dimension_type: Identifier,
         pub(crate) dimension_name: Identifier,
@@ -151,6 +183,20 @@ pub struct PlayerAbilities {
     pub field_of_view_modifier: f32,
 }
 
+structstruck::strike! {
+    #[cb_packet(State::Play, 0x3c)]
+    #[derive(Encodable, Debug, PartialEq, Clone)]
+    pub struct SynchronizePlayerPosition {
+        pub x: f64,
+        pub y: f64,
+        pub z: f64,
+        pub yaw: f32,
+        pub pitch: f32,
+        pub flags: SynchronizePlayerPositionFlags,
+        pub teleport_id: VarInt,
+    }
+}
+
 #[cb_packet(State::Play, 0x4d)]
 #[derive(Encodable, Debug, PartialEq, Clone)]
 pub struct SetHeldItem {
@@ -160,5 +206,5 @@ pub struct SetHeldItem {
 #[cb_packet(State::Play, 0x6b)]
 #[derive(Encodable, Debug, PartialEq, Eq, Clone)]
 pub struct FeatureFlags {
-    pub features: Array<VarInt, Feature>,
+    pub features: Array<VarIntLength, Feature>,
 }

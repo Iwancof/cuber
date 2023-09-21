@@ -4,9 +4,9 @@ use std::net::Ipv4Addr;
 
 use protocol::client_bound::{
     ChangeDifficulty, FeatureFlags, LoginPlay, LoginSuccess, PlayerAbilities, PluginMessage,
-    SetHeldItem, SpawnEntity,
+    SetHeldItem, SpawnEntity, SynchronizePlayerPosition,
 };
-use protocol::common::PlayerAbilitiesFlags;
+use protocol::common::{PlayerAbilitiesFlags, SynchronizePlayerPositionFlags};
 use protocol::primitive::Angle;
 use protocol::server_bound::HandshakeNextState;
 use protocol::{CResult, Client};
@@ -93,6 +93,7 @@ async fn main() -> CResult<()> {
 
         let cd = ChangeDifficulty {
             new_difficulty: protocol::common::Difficulty::Peaceful,
+            difficulty_locked: false,
         };
         client.send_packet(cd).await;
 
@@ -123,9 +124,23 @@ async fn main() -> CResult<()> {
         };
         client.send_packet(se).await;
 
-        while true {
+        loop {
             let packet = client.receive_packet().await?.as_play();
-            println!("packet: {:?}", packet);
+            if packet.is_err() {
+                println!("packet: {:?}", packet);
+                continue;
+            }
+            // println!("packet: {:?}", packet);
+            let sync = SynchronizePlayerPosition {
+                x: 0.,
+                y: 0.,
+                z: 0.,
+                yaw: 0.,
+                pitch: 0.,
+                flags: SynchronizePlayerPositionFlags::empty(),
+                teleport_id: 0.into(),
+            };
+            client.send_packet(sync).await;
         }
     }
 

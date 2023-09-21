@@ -1,8 +1,10 @@
 pub mod array;
 pub mod leb128;
 
-use array::{Array, ArrayLength};
+use array::Array;
 use leb128::read_var_int;
+
+use self::array::VarIntLength;
 
 use super::CResult;
 use super::{Decodable, Encodable};
@@ -30,7 +32,7 @@ macro_rules! write_primitive {
         1
     }};
     ($writer: ident, $method: ident, $value: expr) => {{
-        fn get_size<T>(_: &T) -> usize {
+        const fn get_size<T>(_: &T) -> usize {
             std::mem::size_of::<T>()
         }
 
@@ -151,7 +153,7 @@ impl Encodable for String {
 }
 impl Decodable for String {
     fn decode<T: Read>(reader: &mut T) -> CResult<Self> {
-        let buf = Array::<VarInt, u8>::decode(reader)?.inner;
+        let buf = Array::<VarIntLength, u8>::decode(reader)?.inner;
         Ok(String::from_utf8(buf)?)
     }
 }
@@ -369,6 +371,21 @@ mod tests {
         let r = TestType::decode(&mut rp);
 
         assert_eq!(r.unwrap(), tt);
+    }
+
+    #[test]
+    fn f32_encode() {
+        let mut buf = Vec::new();
+        0.1_f32.encode(&mut buf);
+
+        // 0.1 = 0x3dcccccd
+        assert_eq!(buf, vec![0x3d, 0xcc, 0xcc, 0xcd]);
+    }
+
+    #[test]
+    fn f32_decode() {
+        let mut buf = Cursor::new(vec![0x3d, 0xcc, 0xcc, 0xcd]);
+        assert_eq!(f32::decode(&mut buf).unwrap(), 0.1_f32);
     }
 
     #[test]

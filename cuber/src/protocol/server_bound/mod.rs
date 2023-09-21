@@ -1,5 +1,5 @@
 use super::primitive::{
-    array::{Array, PacketInferredInBytes},
+    array::{Array, PacketInferredInBytes, VarIntLength},
     Identifier,
 };
 use super::CResult;
@@ -158,8 +158,8 @@ define_server_bound_packets! {
         #[sb_packet(1)]
         #[derive(Decodable, Debug, PartialEq, Eq, Clone, Hash)]
         encryption_response: pub struct EncryptionResponse {
-            pub shared_secret: Array<VarInt, u8>,
-            pub verify_token: Array<VarInt, u8>,
+            pub shared_secret: Array<VarIntLength, u8>,
+            pub verify_token: Array<VarIntLength, u8>,
         }
 
         #[sb_packet(2)]
@@ -174,6 +174,12 @@ define_server_bound_packets! {
 define_server_bound_packets! {
     #[derive(Debug)]
     pub enum Play {
+        #[sb_packet(0x00)]
+        #[derive(Decodable, Debug, PartialEq, Eq, Clone, Hash)]
+        confirm_teleportation: pub struct ConfirmTeleportation {
+            pub teleport_id: VarInt,
+        }
+
         #[sb_packet(0x08)]
         #[derive(Decodable, Debug, PartialEq, Eq, Clone, Hash)]
         client_information: pub struct ClientInformation {

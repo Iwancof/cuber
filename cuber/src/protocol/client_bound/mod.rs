@@ -8,7 +8,10 @@ use uuid::Uuid;
 
 use super::{
     common::{Feature, GameMode},
-    primitive::{array::Array, BoolConditional, Chat, Identifier, Position, Todo, VarInt},
+    primitive::{
+        array::{Array, PacketInferredInBytes},
+        BoolConditional, Chat, Identifier, Position, Todo, VarInt,
+    },
     BuiltPacket, Encodable, State,
 };
 
@@ -78,7 +81,7 @@ pub struct SetCompression {
 pub struct PluginRequest {
     message_id: VarInt,
     channel: Identifier,
-    data: Array<VarInt, u8>,
+    data: Array<PacketInferredInBytes, u8>,
 }
 
 structstruck::strike! {

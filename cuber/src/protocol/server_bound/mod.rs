@@ -193,7 +193,7 @@ define_server_bound_packets! {
         #[derive(Decodable, Debug, PartialEq, Eq, Clone, Hash)]
         plugin_message: pub struct PlguinMessage {
             channel: Identifier,
-            data: Array<VarInt, u8>,
+            data: Array<PacketInferredInBytes, u8>,
         }
 
         #[sb_packet(0x14)]

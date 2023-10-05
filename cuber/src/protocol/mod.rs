@@ -11,13 +11,13 @@ use common::*;
 use primitive::leb128::{async_read_var_int, build_var_int};
 use server_bound::{Handshaking, Login, PacketCluster, Play, Status};
 
-pub type CResult<T> = Result<T, anyhow::Error>;
+pub use anyhow::Result;
 
 pub trait Encodable {
     fn encode<T: Write>(&self, writer: &mut T) -> usize;
 }
 pub trait Decodable: Sized {
-    fn decode<T: Read>(reader: &mut T) -> CResult<Self>;
+    fn decode<T: Read>(reader: &mut T) -> Result<Self>;
 }
 
 #[derive(Debug)]
@@ -61,7 +61,7 @@ impl Client {
         self.send_built_packet(packet.to_packet()).await
     }
 
-    pub async fn receive_packet(&mut self) -> CResult<ReceivedPacket> {
+    pub async fn receive_packet(&mut self) -> Result<ReceivedPacket> {
         assert_eq!(self.compression, Compression::Disabled); // TODO
         assert_eq!(self.encryption, Encryption::Disabled); // TODO
 
@@ -128,7 +128,7 @@ impl ReceivedPacket {
 // TODO: change by connection configure.
 pub async fn receive_packet_plain_no_compression<T: tokio::io::AsyncRead + Unpin>(
     reader: &mut T,
-) -> CResult<ReceivedPacket> {
+) -> Result<ReceivedPacket> {
     let length = async_read_var_int(reader).await?.1 as _;
     let mut buffer = vec![0; length];
 

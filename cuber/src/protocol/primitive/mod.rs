@@ -6,7 +6,6 @@ use leb128::read_var_int;
 
 use self::array::VarIntLength;
 
-use super::CResult;
 use super::{Decodable, Encodable};
 
 use deriver::{Decodable, Encodable};
@@ -15,6 +14,8 @@ use byteorder::{NetworkEndian, ReadBytesExt, WriteBytesExt};
 use nbt::Blob;
 use std::io::{ErrorKind, Read, Write};
 use uuid::Uuid;
+
+use anyhow::Result;
 
 macro_rules! write_primitive {
     ($writer: ident, write_u8, $value: expr) => {{
@@ -68,7 +69,7 @@ macro_rules! define_prim {
             }
         }
         impl Decodable for $type {
-            fn decode<T: Read>(reader: &mut T) -> CResult<Self> {
+            fn decode<T: Read>(reader: &mut T) -> Result<Self> {
                 Ok(read_primitive!(reader, $read_method)?)
             }
         }
@@ -94,13 +95,15 @@ impl Encodable for bool {
     }
 }
 impl Decodable for bool {
-    fn decode<T: Read>(reader: &mut T) -> CResult<Self> {
+    fn decode<T: Read>(reader: &mut T) -> Result<Self> {
         match u8::decode(reader) {
             Ok(0) => Ok(false),
             Ok(1) => Ok(true),
-            Ok(_) => {
-                Err(std::io::Error::new(ErrorKind::InvalidData, "invalid boolean value").into())
-            }
+            Ok(i) => Err(std::io::Error::new(
+                ErrorKind::InvalidData,
+                format!("invalid boolean value: {}", i),
+            )
+            .into()),
             Err(e) => Err(e),
         }
     }
@@ -123,7 +126,7 @@ impl Encodable for VarInt {
     }
 }
 impl Decodable for VarInt {
-    fn decode<T: Read>(reader: &mut T) -> CResult<Self> {
+    fn decode<T: Read>(reader: &mut T) -> Result<Self> {
         Ok(VarInt(read_var_int(reader)?.1))
     }
 }
@@ -152,7 +155,7 @@ impl Encodable for String {
     }
 }
 impl Decodable for String {
-    fn decode<T: Read>(reader: &mut T) -> CResult<Self> {
+    fn decode<T: Read>(reader: &mut T) -> Result<Self> {
         let buf = Array::<VarIntLength, u8>::decode(reader)?.inner;
         Ok(String::from_utf8(buf)?)
     }
@@ -192,7 +195,7 @@ impl Encodable for Uuid {
 }
 
 impl Decodable for Uuid {
-    fn decode<T: Read>(reader: &mut T) -> CResult<Self> {
+    fn decode<T: Read>(reader: &mut T) -> Result<Self> {
         Ok(Self::from_u128_le(u128::decode(reader)?))
     }
 }
@@ -213,7 +216,7 @@ impl Position {
             && (-2_i32).pow(25) <= self.z
             && self.z < 2_i32.pow(25)
     }
-    pub fn new(x: i32, y: i32, z: i32) -> CResult<Self> {
+    pub fn new(x: i32, y: i32, z: i32) -> Result<Self> {
         let pos = Self { x, y, z };
         if !pos.is_valid() {
             return Err(std::io::Error::new(
@@ -243,7 +246,7 @@ impl Position {
         packed |= self.y as i64 & 0xfff;
         packed
     }
-    pub fn unpack(packed: i64) -> CResult<Self> {
+    pub fn unpack(packed: i64) -> Result<Self> {
         Self::new(
             ((packed >> 38) & 0x3ffffff) as i32,
             ((packed << 52) >> 52) as i32,
@@ -259,7 +262,7 @@ impl Encodable for Position {
 }
 
 impl Decodable for Position {
-    fn decode<T: Read>(reader: &mut T) -> CResult<Self> {
+    fn decode<T: Read>(reader: &mut T) -> Result<Self> {
         Self::unpack(i64::decode(reader)?)
     }
 }
@@ -272,7 +275,7 @@ impl Encodable for Blob {
 }
 
 impl Decodable for Blob {
-    fn decode<T: Read>(reader: &mut T) -> CResult<Self> {
+    fn decode<T: Read>(reader: &mut T) -> Result<Self> {
         Ok(Self::from_reader(reader)?)
     }
 }
@@ -302,7 +305,7 @@ impl<Inner> Decodable for BoolConditional<Inner>
 where
     Inner: Decodable,
 {
-    fn decode<T: Read>(reader: &mut T) -> CResult<Self> {
+    fn decode<T: Read>(reader: &mut T) -> Result<Self> {
         if !bool::decode(reader)? {
             return Ok(Self(None));
         }
@@ -328,7 +331,7 @@ impl Encodable for Todo {
     }
 }
 impl Decodable for Todo {
-    fn decode<T: Read>(_reader: &mut T) -> CResult<Self> {
+    fn decode<T: Read>(_reader: &mut T) -> Result<Self> {
         todo!()
     }
 }

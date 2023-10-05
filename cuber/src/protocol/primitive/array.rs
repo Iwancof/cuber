@@ -7,8 +7,10 @@ use std::{
 use deriver::{Decodable, Encodable};
 
 use crate::protocol::{Decodable, Encodable};
+use super::VarInt;
 
-use super::{CResult, VarInt};
+use anyhow::Result;
+
 pub trait ArrayLength: Sized {
     fn from(write_object: usize, write_bytes: usize) -> Self;
     fn got_element(&mut self, read_object: usize, read_bytes: usize);
@@ -48,12 +50,12 @@ impl<const L: usize> Encodable for FixedLength<L> {
     }
 }
 impl<const L: usize> Decodable for FixedLength<L> {
-    fn decode<T: Read>(_reader: &mut T) -> CResult<Self> {
+    fn decode<T: Read>(_reader: &mut T) -> Result<Self> {
         Ok(Self { remain: L })
     }
 }
 impl<const L: usize> ArrayLength for FixedLength<L> {
-    fn from(write_object: usize, write_bytes: usize) -> Self {
+    fn from(write_object: usize, _write_bytes: usize) -> Self {
         if write_object != L {
             panic!(
                 "Fixed array length mismatch: expected {}, but got {}",
@@ -97,7 +99,7 @@ impl Encodable for PacketInferredInBytes {
     }
 }
 impl Decodable for PacketInferredInBytes {
-    fn decode<T: Read>(_reader: &mut T) -> CResult<Self> {
+    fn decode<T: Read>(_reader: &mut T) -> Result<Self> {
         Ok(Self)
     }
 }
@@ -152,7 +154,7 @@ where
     Inner: Decodable,
     L: Decodable + ArrayLength,
 {
-    fn decode<Outer: Read>(reader: &mut Outer) -> CResult<Self> {
+    fn decode<Outer: Read>(reader: &mut Outer) -> Result<Self> {
         struct ReadCountWrapper<Inner> {
             inner: Inner,
             count: usize,
@@ -253,7 +255,6 @@ impl<L, Inner> Array<L, Inner> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::protocol::primitive::VarInt;
     use std::io::Cursor;
 
     #[test]

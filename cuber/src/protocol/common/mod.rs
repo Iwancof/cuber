@@ -1,4 +1,13 @@
-use super::{primitive::Identifier, Decodable, Encodable};
+use std::hash::Hash;
+
+use super::{
+    primitive::{
+        array::{Array, VarIntLengthInBytes},
+        Identifier,
+    },
+    Decodable, Encodable,
+};
+use deriver::{Decodable, Encodable};
 
 #[derive(PartialEq, Eq, Clone, Copy, Debug, Hash)]
 pub enum State {
@@ -32,7 +41,7 @@ pub enum GameMode {
 }
 
 impl Decodable for GameMode {
-    fn decode<T: std::io::Read>(reader: &mut T) -> super::CResult<Self> {
+    fn decode<T: std::io::Read>(reader: &mut T) -> super::Result<Self> {
         let raw = i8::decode(reader)?;
         match raw {
             -1 => Ok(GameMode::Undefined),
@@ -91,7 +100,7 @@ pub enum Difficulty {
 }
 
 impl Decodable for Difficulty {
-    fn decode<T: std::io::Read>(reader: &mut T) -> super::CResult<Self> {
+    fn decode<T: std::io::Read>(reader: &mut T) -> super::Result<Self> {
         let raw = u8::decode(reader)?;
         match raw {
             0 => Ok(Difficulty::Peaceful),
@@ -133,7 +142,7 @@ impl Encodable for PlayerAbilitiesFlags {
 }
 
 impl Decodable for PlayerAbilitiesFlags {
-    fn decode<T: std::io::Read>(reader: &mut T) -> super::CResult<Self> {
+    fn decode<T: std::io::Read>(reader: &mut T) -> super::Result<Self> {
         let raw = u8::decode(reader)?;
         match Self::from_bits(raw) {
             Some(flags) => Ok(flags),
@@ -164,7 +173,7 @@ impl Encodable for SynchronizePlayerPositionFlags {
 }
 
 impl Decodable for SynchronizePlayerPositionFlags {
-    fn decode<T: std::io::Read>(reader: &mut T) -> super::CResult<Self> {
+    fn decode<T: std::io::Read>(reader: &mut T) -> super::Result<Self> {
         let raw = u8::decode(reader)?;
         match Self::from_bits(raw) {
             Some(flags) => Ok(flags),
@@ -173,6 +182,78 @@ impl Decodable for SynchronizePlayerPositionFlags {
                 format!("Invalid player abilities flags: {}", raw),
             )
             .into()),
+        }
+    }
+}
+
+#[derive(Debug, Clone, Copy)]
+pub struct InChunkOffset {
+    x: i32,
+    z: i32,
+}
+
+impl InChunkOffset {
+    pub fn pack(self) -> i8 {
+        let x = self.x & 0x0f;
+        let z = self.z & 0x0f;
+        ((x << 4) | z) as i8
+    }
+}
+
+impl PartialEq for InChunkOffset {
+    fn eq(&self, other: &Self) -> bool {
+        self.pack() == other.pack()
+    }
+}
+
+impl Eq for InChunkOffset {}
+impl Hash for InChunkOffset {
+    fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
+        self.pack().hash(state)
+    }
+}
+
+impl Encodable for InChunkOffset {
+    fn encode<T: std::io::Write>(&self, writer: &mut T) -> usize {
+        self.pack().encode(writer)
+    }
+}
+
+impl Decodable for InChunkOffset {
+    fn decode<R: std::io::Read>(reader: &mut R) -> super::Result<Self> {
+        let raw = i8::decode(reader)?;
+        let x = (raw >> 4) & 0x0f;
+        let z = raw & 0x0f;
+        Ok(Self {
+            x: x as i32,
+            z: z as i32,
+        })
+    }
+}
+
+#[derive(Decodable, Encodable, Debug, PartialEq, Eq, Clone, Hash)]
+pub struct SkyLightArray {
+    array: Array<VarIntLengthInBytes, u8>,
+}
+
+impl SkyLightArray {
+    pub fn to_index(x: u32, y: u32, z: u32) -> (usize, bool) {
+        assert!(x < 16);
+        assert!(y < 16);
+        assert!(z < 16);
+
+        let index = (y << 8) | (z << 4) | x;
+        let is_upper = index & 1 == 1;
+
+        (index as usize >> 1, is_upper)
+    }
+    pub fn get(&self, x: u32, y: u32, z: u32) -> u8 {
+        let (index, is_upper) = Self::to_index(x, y, z);
+        let byte = self.array.inner[index];
+        if is_upper {
+            byte >> 4
+        } else {
+            byte & 0x0f
         }
     }
 }

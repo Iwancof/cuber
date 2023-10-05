@@ -113,7 +113,7 @@ pub fn derive_decoable(input: RawToken) -> RawToken {
 
     quote! {
         impl Decodable for #ident {
-            fn decode<T: std::io::Read>(reader: &mut T) -> CResult<Self> {
+            fn decode<T: std::io::Read>(reader: &mut T) -> anyhow::Result<Self> {
                 #read_code
             }
         }

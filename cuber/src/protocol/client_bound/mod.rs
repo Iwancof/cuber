@@ -7,7 +7,10 @@ use structstruck;
 use uuid::Uuid;
 
 use super::{
-    common::{Difficulty, Feature, GameMode, PlayerAbilitiesFlags, SynchronizePlayerPositionFlags},
+    common::{
+        Difficulty, Feature, GameMode, InChunkOffset, PlayerAbilitiesFlags, SkyLightArray,
+        SynchronizePlayerPositionFlags,
+    },
     primitive::{
         array::{Array, PacketInferredInBytes, VarIntLength, VarIntLengthInBytes},
         Angle, BoolConditional, Chat, Identifier, Position, Todo, VarInt,
@@ -120,30 +123,30 @@ structstruck::strike! {
     #[cb_packet(State::Play, 0x24)]
     #[derive(Encodable, Debug, PartialEq, Clone)]
     pub struct ChunkDataAndUpdateLight {
-        chunk_x: i32,
-        chunk_z: i32,
-        height_maps: nbt::Blob,
-        chunk_data: Array<VarIntLengthInBytes, #[derive(Encodable, Debug, PartialEq, Clone)] pub struct ChunkSection {
-            block_count: i16,
-            block_states: #[derive(Encodable, Debug, PartialEq, Clone)] pub struct PalettedContainer {
-                bits_per_entry: u8,
-                palette: Todo,
-                data_array: Array<VarIntLength, i64>,
+        pub chunk_x: i32,
+        pub chunk_z: i32,
+        pub height_maps: nbt::Blob,
+        pub chunk_data: Array<VarIntLengthInBytes, #[derive(Encodable, Debug, PartialEq, Clone)] pub struct ChunkSection {
+            pub block_count: i16,
+            pub block_states: #[derive(Encodable, Debug, PartialEq, Clone)] pub struct PalettedContainer {
+                pub bits_per_entry: u8,
+                pub palette: Todo,
+                pub data_array: Array<VarIntLength, i64>,
             },
-            biomes: PalettedContainer,
+            pub biomes: PalettedContainer,
         }>,
-        block_entities: Array<VarIntLength, #[derive(Encodable, Debug, PartialEq, Clone)] pub struct BlockEntity {
-            xy: Todo,
-            y: u16,
-            be_type: VarInt,
-            data: nbt::Blob,
+        pub block_entities: Array<VarIntLength, #[derive(Encodable, Debug, PartialEq, Clone)] pub struct BlockEntity {
+            pub xy: InChunkOffset,
+            pub y: u16,
+            pub be_type: VarInt,
+            pub data: nbt::Blob,
         }>,
-        sky_light_mask: Todo,
-        block_light_mask: Todo,
-        empty_sky_light_mask: Todo,
-        empty_block_light_mask: Todo,
-        sky_lights_array: Array<VarIntLength, Array<VarIntLength, Todo>>,
-        block_lights_array: Array<VarIntLength, Array<VarIntLength, Todo>>,
+        pub sky_light_mask: u32, // replace with BitSet
+        pub block_light_mask: u32,
+        pub empty_sky_light_mask: u32,
+        pub empty_block_light_mask: u32,
+        pub sky_lights_array: Array<VarIntLength, SkyLightArray>,
+        pub block_lights_array: Array<VarIntLength, SkyLightArray>,
     }
 }
 

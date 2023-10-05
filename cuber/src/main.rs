@@ -3,17 +3,19 @@ pub mod protocol;
 use std::net::Ipv4Addr;
 
 use protocol::client_bound::{
-    ChangeDifficulty, FeatureFlags, LoginPlay, LoginSuccess, PlayerAbilities, PluginMessage,
-    SetHeldItem, SpawnEntity, SynchronizePlayerPosition,
+    ChangeDifficulty, ChunkDataAndUpdateLight, FeatureFlags, LoginPlay, LoginSuccess,
+    PlayerAbilities, PluginMessage, SetHeldItem, SpawnEntity, SynchronizePlayerPosition,
 };
 use protocol::common::{PlayerAbilitiesFlags, SynchronizePlayerPositionFlags};
 use protocol::primitive::Angle;
 use protocol::server_bound::HandshakeNextState;
-use protocol::{CResult, Client};
+use protocol::Client;
 use tokio::net::TcpListener;
 
+use anyhow::Result;
+
 #[tokio::main]
-async fn main() -> CResult<()> {
+async fn main() -> Result<()> {
     let listener = TcpListener::bind((Ipv4Addr::new(127, 0, 0, 1), 25565)).await?;
 
     while let Ok((socket, addr)) = listener.accept().await {
@@ -123,6 +125,27 @@ async fn main() -> CResult<()> {
             velocity_z: 0,
         };
         client.send_packet(se).await;
+
+        let mut heightmaps = nbt::Blob::new();
+        heightmaps.insert(
+            "MOTION_BLOCKING",
+            nbt::Value::List(vec![nbt::Value::Long(0); 37]),
+        )?;
+
+        let cdap = ChunkDataAndUpdateLight {
+            chunk_x: 0,
+            chunk_z: 0,
+            height_maps: heightmaps,
+            chunk_data: vec![].into(),
+            block_entities: vec![].into(),
+            sky_light_mask: 0,
+            block_light_mask: 0,
+            empty_sky_light_mask: 0,
+            empty_block_light_mask: 0,
+            sky_lights_array: vec![].into(),
+            block_lights_array: vec![].into(),
+        };
+        client.send_packet(cdap).await;
 
         loop {
             let packet = client.receive_packet().await?.as_play();

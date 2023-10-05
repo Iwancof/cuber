@@ -9,7 +9,7 @@ use deriver::{Decodable, Encodable};
 use crate::protocol::{Decodable, Encodable};
 use super::VarInt;
 
-use anyhow::Result;
+use anyhow::{Result, Context as _, ensure};
 
 pub trait ArrayLength: Sized {
     fn from(write_object: usize, write_bytes: usize) -> Self;
@@ -174,7 +174,7 @@ where
             count: 0,
         };
 
-        let mut remain_checker: L = L::decode(reader)?;
+        let mut remain_checker: L = L::decode(reader).context("Failed to decode array length")?;
         let mut inner = Vec::new();
 
         while let Ok(element) = Inner::decode(reader) {
@@ -186,7 +186,7 @@ where
             }
         }
 
-        assert!(remain_checker.is_end());
+        ensure!(remain_checker.is_end(), "Array length mismatch");
 
         Ok(Self {
             inner,

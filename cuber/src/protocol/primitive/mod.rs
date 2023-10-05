@@ -12,10 +12,10 @@ use deriver::{Decodable, Encodable};
 
 use byteorder::{NetworkEndian, ReadBytesExt, WriteBytesExt};
 use nbt::Blob;
-use std::io::{ErrorKind, Read, Write};
+use std::io::{Read, Write};
 use uuid::Uuid;
 
-use anyhow::Result;
+use anyhow::{Result, Context as _, bail, ensure};
 
 macro_rules! write_primitive {
     ($writer: ident, write_u8, $value: expr) => {{
@@ -70,7 +70,9 @@ macro_rules! define_prim {
         }
         impl Decodable for $type {
             fn decode<T: Read>(reader: &mut T) -> Result<Self> {
-                Ok(read_primitive!(reader, $read_method)?)
+                Ok(read_primitive!(reader, $read_method).with_context(|| {
+                    format!("could not read data. {}()", stringify!($read_method))
+                })?)
             }
         }
     };
@@ -96,15 +98,10 @@ impl Encodable for bool {
 }
 impl Decodable for bool {
     fn decode<T: Read>(reader: &mut T) -> Result<Self> {
-        match u8::decode(reader) {
-            Ok(0) => Ok(false),
-            Ok(1) => Ok(true),
-            Ok(i) => Err(std::io::Error::new(
-                ErrorKind::InvalidData,
-                format!("invalid boolean value: {}", i),
-            )
-            .into()),
-            Err(e) => Err(e),
+        match u8::decode(reader)? {
+            0 => Ok(false),
+            1 => Ok(true),
+            x => bail!("invalid bool value: {}", x),
         }
     }
 }
@@ -127,7 +124,7 @@ impl Encodable for VarInt {
 }
 impl Decodable for VarInt {
     fn decode<T: Read>(reader: &mut T) -> Result<Self> {
-        Ok(VarInt(read_var_int(reader)?.1))
+        Ok(VarInt(read_var_int(reader).context("could not read var int")?.1))
     }
 }
 impl From<i32> for VarInt {
@@ -156,7 +153,7 @@ impl Encodable for String {
 }
 impl Decodable for String {
     fn decode<T: Read>(reader: &mut T) -> Result<Self> {
-        let buf = Array::<VarIntLength, u8>::decode(reader)?.inner;
+        let buf = Array::<VarIntLength, u8>::decode(reader).context("could not read string length")?.inner;
         Ok(String::from_utf8(buf)?)
     }
 }
@@ -196,7 +193,7 @@ impl Encodable for Uuid {
 
 impl Decodable for Uuid {
     fn decode<T: Read>(reader: &mut T) -> Result<Self> {
-        Ok(Self::from_u128_le(u128::decode(reader)?))
+        Ok(Self::from_u128_le(u128::decode(reader).context("could not read uuid")?))
     }
 }
 
@@ -218,13 +215,7 @@ impl Position {
     }
     pub fn new(x: i32, y: i32, z: i32) -> Result<Self> {
         let pos = Self { x, y, z };
-        if !pos.is_valid() {
-            return Err(std::io::Error::new(
-                ErrorKind::InvalidData,
-                format!("invalid position: {:?}", pos),
-            )
-            .into());
-        }
+        ensure!(pos.is_valid(), "invalid position: {:?}", pos);
         Ok(pos)
     }
     pub fn set_x(&mut self, x: i32) -> &mut Self {
@@ -263,7 +254,7 @@ impl Encodable for Position {
 
 impl Decodable for Position {
     fn decode<T: Read>(reader: &mut T) -> Result<Self> {
-        Self::unpack(i64::decode(reader)?)
+        Self::unpack(i64::decode(reader).context("could not read position")?)
     }
 }
 
@@ -306,10 +297,10 @@ where
     Inner: Decodable,
 {
     fn decode<T: Read>(reader: &mut T) -> Result<Self> {
-        if !bool::decode(reader)? {
+        if !bool::decode(reader).context("could not read bool in BoolConditional")? {
             return Ok(Self(None));
         }
-        return Ok(Self(Some(Inner::decode(reader)?)));
+        return Ok(Self(Some(Inner::decode(reader).context("could not read inner value in BoolConditional")?)));
     }
 }
 impl<Inner> From<Option<Inner>> for BoolConditional<Inner> {

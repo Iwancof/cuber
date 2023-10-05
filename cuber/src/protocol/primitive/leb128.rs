@@ -1,22 +1,20 @@
-use tokio::io::AsyncReadExt;
 use std::marker::Unpin;
+use tokio::io::AsyncReadExt;
 
 use byteorder::ReadBytesExt;
 
 const VARINT_SEGMENT_BITS: u8 = 0x7f;
 const VARINT_CONTINUE_BIT: u8 = 0x80;
 
-use anyhow::Result;
+use anyhow::{Context as _, Result, ensure};
 
-pub async fn async_read_var_int<T: AsyncReadExt + Unpin>(
-    d: &mut T,
-) -> Result<(usize, i32)> {
+pub async fn async_read_var_int<T: AsyncReadExt + Unpin>(d: &mut T) -> Result<(usize, i32)> {
     let mut value = 0;
     let mut position = 0;
     let mut read = 0;
 
     loop {
-        let current_byte = d.read_u8().await?;
+        let current_byte = d.read_u8().await.context("Failed to read byte(Async)")?;
         read += 1;
 
         let segment = current_byte & VARINT_SEGMENT_BITS;
@@ -27,12 +25,7 @@ pub async fn async_read_var_int<T: AsyncReadExt + Unpin>(
         }
 
         position += 7;
-        if position >= 32 {
-            return Err(tokio::io::Error::new(
-                tokio::io::ErrorKind::InvalidData,
-                "VarInt is too big",
-            ).into());
-        }
+        ensure!(position < 32, "VarInt is too big");
     }
 
     Ok((read, value))
@@ -44,7 +37,7 @@ pub fn read_var_int<T: ReadBytesExt>(d: &mut T) -> Result<(usize, i32)> {
     let mut read = 0;
 
     loop {
-        let current_byte = d.read_u8()?;
+        let current_byte = d.read_u8().context("Failed to read byte")?;
         read += 1;
 
         let segment = current_byte & VARINT_SEGMENT_BITS;
@@ -55,12 +48,7 @@ pub fn read_var_int<T: ReadBytesExt>(d: &mut T) -> Result<(usize, i32)> {
         }
 
         position += 7;
-        if position >= 32 {
-            return Err(std::io::Error::new(
-                std::io::ErrorKind::InvalidData,
-                "VarInt is too big",
-            ).into());
-        }
+        ensure!(position < 32, "VarInt is too big");
     }
 
     Ok((read, value))

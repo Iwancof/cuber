@@ -74,7 +74,7 @@ pub fn derive_decoable(input: RawToken) -> RawToken {
                             .clone()
                             .expect("(TODO) unnamed structure is not allowed");
                         quote! {
-                            let #name = Decodable::decode(reader)?;
+                            let #name = Decodable::decode(reader).with_context(|| format!("Failed to decode {}", stringify!(#name)))?;
                         }
                     })
                     .fold(TokenStream::new(), |acc, mem| quote! { #acc #mem });

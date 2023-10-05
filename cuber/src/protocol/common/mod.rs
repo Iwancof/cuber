@@ -9,6 +9,8 @@ use super::{
 };
 use deriver::{Decodable, Encodable};
 
+use anyhow::{bail, Context as _, Result};
+
 #[derive(PartialEq, Eq, Clone, Copy, Debug, Hash)]
 pub enum State {
     Handshaking,
@@ -41,19 +43,15 @@ pub enum GameMode {
 }
 
 impl Decodable for GameMode {
-    fn decode<T: std::io::Read>(reader: &mut T) -> super::Result<Self> {
-        let raw = i8::decode(reader)?;
+    fn decode<T: std::io::Read>(reader: &mut T) -> Result<Self> {
+        let raw = i8::decode(reader).context("Failed to decode game mode")?;
         match raw {
             -1 => Ok(GameMode::Undefined),
             0 => Ok(GameMode::Survival),
             1 => Ok(GameMode::Creative),
             2 => Ok(GameMode::Adventure),
             3 => Ok(GameMode::Spectator),
-            id => Err(std::io::Error::new(
-                std::io::ErrorKind::InvalidData,
-                format!("Invalid game mode id: {}", id),
-            )
-            .into()),
+            id => bail!("Invalid game mode: {}", id),
         }
     }
 }
@@ -100,8 +98,8 @@ pub enum Difficulty {
 }
 
 impl Decodable for Difficulty {
-    fn decode<T: std::io::Read>(reader: &mut T) -> super::Result<Self> {
-        let raw = u8::decode(reader)?;
+    fn decode<T: std::io::Read>(reader: &mut T) -> Result<Self> {
+        let raw = u8::decode(reader).context("Failed to decode difficulty")?;
         match raw {
             0 => Ok(Difficulty::Peaceful),
             1 => Ok(Difficulty::Easy),
@@ -142,15 +140,11 @@ impl Encodable for PlayerAbilitiesFlags {
 }
 
 impl Decodable for PlayerAbilitiesFlags {
-    fn decode<T: std::io::Read>(reader: &mut T) -> super::Result<Self> {
-        let raw = u8::decode(reader)?;
+    fn decode<T: std::io::Read>(reader: &mut T) -> Result<Self> {
+        let raw = u8::decode(reader).context("Failed to decode player abilities flags")?;
         match Self::from_bits(raw) {
             Some(flags) => Ok(flags),
-            None => Err(std::io::Error::new(
-                std::io::ErrorKind::InvalidData,
-                format!("Invalid player abilities flags: {}", raw),
-            )
-            .into()),
+            None => bail!("Invalid player abilities flags: {}", raw),
         }
     }
 }
@@ -173,15 +167,11 @@ impl Encodable for SynchronizePlayerPositionFlags {
 }
 
 impl Decodable for SynchronizePlayerPositionFlags {
-    fn decode<T: std::io::Read>(reader: &mut T) -> super::Result<Self> {
-        let raw = u8::decode(reader)?;
+    fn decode<T: std::io::Read>(reader: &mut T) -> Result<Self> {
+        let raw = u8::decode(reader).context("Failed to decode synchronize player position flags")?;
         match Self::from_bits(raw) {
             Some(flags) => Ok(flags),
-            None => Err(std::io::Error::new(
-                std::io::ErrorKind::InvalidData,
-                format!("Invalid player abilities flags: {}", raw),
-            )
-            .into()),
+            None => bail!("Invalid synchronize player position flags: {}", raw),
         }
     }
 }
@@ -220,8 +210,8 @@ impl Encodable for InChunkOffset {
 }
 
 impl Decodable for InChunkOffset {
-    fn decode<R: std::io::Read>(reader: &mut R) -> super::Result<Self> {
-        let raw = i8::decode(reader)?;
+    fn decode<R: std::io::Read>(reader: &mut R) -> Result<Self> {
+        let raw = i8::decode(reader).context("Failed to decode in-chunk offset")?;
         let x = (raw >> 4) & 0x0f;
         let z = raw & 0x0f;
         Ok(Self {

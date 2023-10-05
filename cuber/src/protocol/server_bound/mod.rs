@@ -8,7 +8,7 @@ use packet_id::sb_packet;
 use std::io::Read;
 use uuid::Uuid;
 
-use anyhow::Result;
+use anyhow::{Result, Context as _, bail};
 
 pub trait ServerBoundPacket: Decodable {
     const PACKET_ID: i32;
@@ -17,7 +17,7 @@ pub trait ServerBoundPacket: Decodable {
 pub trait PacketCluster: Sized {
     fn parse_with_id<T: Read>(id: i32, reader: &mut T) -> Result<Self>;
     fn parse<T: Read>(reader: &mut T) -> Result<Self> {
-        let id = VarInt::decode(reader)?.into();
+        let id = VarInt::decode(reader).context("Failed to decode packet id")?.into();
         Self::parse_with_id(id, reader)
     }
 }
@@ -57,17 +57,10 @@ macro_rules! define_server_bound_packets {
                 #[deny(unreachable_patterns)]
                 match id {
                     $(
-                        /*
-                        $struct_ident::PACKET_ID => {
-                            println!("found packet: {}", stringify!($struct_ident));
-                            let decoded = $struct_ident::decode(reader)?;
-                            Ok(Self::$struct_ident(decoded))
-                        }
-                        */
-                        $struct_ident::PACKET_ID => Ok(Self::$struct_ident($struct_ident::decode(reader)?)),
+                        $struct_ident::PACKET_ID => Ok(Self::$struct_ident($struct_ident::decode(reader).with_context(|| format!("Failed to decode {}", stringify!($struct_ident)))?)),
                     )*
                     id => {
-                        Result::Err(std::io::Error::new(std::io::ErrorKind::InvalidData, format!("Unknown packet id: {}", id)).into())
+                        bail!("Unknown packet id: {}", id)
                     }
                 }
             }
@@ -79,7 +72,7 @@ macro_rules! define_server_bound_packets {
                         if let Self::$struct_ident(inner) = self {
                             Ok(inner)
                         } else {
-                            Result::Err(std::io::Error::new(std::io::ErrorKind::Other, format!("expect {} but found {:?}", stringify!($struct_ident), self)).into())
+                            bail!("expect {} but found {:?}", stringify!($struct_ident), self)
                         }
                     }
                     pub fn [<unwrap_ $snake_name>](self) -> $struct_ident {
@@ -99,14 +92,10 @@ pub enum HandshakeNextState {
 
 impl Decodable for HandshakeNextState {
     fn decode<T: Read>(reader: &mut T) -> Result<Self> {
-        match VarInt::decode(reader)?.into() {
+        match VarInt::decode(reader).context("Failed to decode next state")?.into() {
             1 => Ok(Self::Status),
             2 => Ok(Self::Login),
-            unk => Err(std::io::Error::new(
-                std::io::ErrorKind::InvalidData,
-                format!("Unknown next state: {}", unk),
-            )
-            .into()),
+            unknown => bail!("Unknown next state: {}", unknown),
         }
     }
 }
